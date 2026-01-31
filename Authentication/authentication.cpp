@@ -6,8 +6,6 @@ Authentication::Authentication(QWidget *parent)
     , ui(new Ui::Authentication)
 {
     ui->setupUi(this);
-
-    setWindowTitle("Login");
 }
 
 Authentication::~Authentication()

@@ -12,10 +12,9 @@ qt_add_executable(DesktopMessenger
     mainwindow.cpp
     mainwindow.h
     mainwindow.ui
-    Authentication/authentication.h
-    Authentication/authentication.cpp
-    Authentication/authentication.ui
+    Authentication/authentication.h Authentication/authentication.cpp Authentication/authentication.ui
     appwindow.h appwindow.cpp
+    Registration/registration.h Registration/registration.cpp Registration/registration.ui
 )
 
 target_link_libraries(DesktopMessenger
