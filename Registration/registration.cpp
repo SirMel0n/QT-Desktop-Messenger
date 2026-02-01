@@ -69,6 +69,12 @@ Registration::Registration(QWidget *parent)
         "font-weight: bold;"
     );
 
+    //connect show button to the fucntion
+    connect(ui->showButton, &QPushButton::clicked,this , &Registration::showButtonPressed);
+
+    //connect hide button
+    connect(ui->hideButton,&QPushButton::clicked,this, &Registration::hideButtonPressed);
+
     // Set placeholder text for input fields
     ui->loginEdit->setPlaceholderText("Login");
     ui->nickEdit->setPlaceholderText("Nickname");
@@ -76,9 +82,22 @@ Registration::Registration(QWidget *parent)
     
     // Set password field to hide text with bullets/asterisks
     ui->passwordEdit->setEchoMode(QLineEdit::Password);
+
+
 }
 
 Registration::~Registration()
 {
     delete ui;
+}
+
+void Registration::showButtonPressed() {
+
+    ui->passwordEdit -> setEchoMode(QLineEdit::Normal);
+
+}
+
+void Registration::hideButtonPressed() {
+
+    ui->passwordEdit->setEchoMode(QLineEdit::Password);
 }

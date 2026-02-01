@@ -20,6 +20,10 @@ private:
     QString loginVal;
     QString nickVal;
     QString passVal;
+
+private slots:
+    void showButtonPressed();
+    void hideButtonPressed();
 };
 
 #endif // REGISTRATION_H
