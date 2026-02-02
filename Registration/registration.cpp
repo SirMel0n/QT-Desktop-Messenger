@@ -72,8 +72,8 @@ Registration::Registration(QWidget *parent)
     //connect show button to the fucntion
     connect(ui->showButton, &QPushButton::clicked,this , &Registration::showButtonPressed);
 
-    //connect hide button
-    connect(ui->hideButton,&QPushButton::clicked,this, &Registration::hideButtonPressed);
+    // connect cancel button
+    connect(ui->cancelButton,&QPushButton::clicked,this,&Registration::clearInput);
 
     // Set placeholder text for input fields
     ui->loginEdit->setPlaceholderText("Login");
@@ -93,11 +93,18 @@ Registration::~Registration()
 
 void Registration::showButtonPressed() {
 
-    ui->passwordEdit -> setEchoMode(QLineEdit::Normal);
+    if(ui->passwordEdit->echoMode()==QLineEdit::Password) {
+        ui->passwordEdit -> setEchoMode(QLineEdit::Normal);
+        ui ->showButton ->setText("hide");
+    } else if(ui->passwordEdit->echoMode()==QLineEdit::Normal) {
+        ui->passwordEdit -> setEchoMode(QLineEdit::Password);
+        ui->showButton->setText("show");
+    }
 
 }
 
-void Registration::hideButtonPressed() {
-
-    ui->passwordEdit->setEchoMode(QLineEdit::Password);
+void Registration::clearInput() {
+    ui->loginEdit->clear();
+    ui->nickEdit->clear();
+    ui->passwordEdit->clear();
 }

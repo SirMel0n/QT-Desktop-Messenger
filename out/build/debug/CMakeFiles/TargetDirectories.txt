@@ -1,0 +1,8 @@
+D:/MP-Desktop-Messenger/QT-Desktop-Messenger/out/build/debug/CMakeFiles/DesktopMessenger.dir
+D:/MP-Desktop-Messenger/QT-Desktop-Messenger/out/build/debug/CMakeFiles/edit_cache.dir
+D:/MP-Desktop-Messenger/QT-Desktop-Messenger/out/build/debug/CMakeFiles/rebuild_cache.dir
+D:/MP-Desktop-Messenger/QT-Desktop-Messenger/out/build/debug/CMakeFiles/list_install_components.dir
+D:/MP-Desktop-Messenger/QT-Desktop-Messenger/out/build/debug/CMakeFiles/install.dir
+D:/MP-Desktop-Messenger/QT-Desktop-Messenger/out/build/debug/CMakeFiles/install/local.dir
+D:/MP-Desktop-Messenger/QT-Desktop-Messenger/out/build/debug/CMakeFiles/DesktopMessenger_autogen_timestamp_deps.dir
+D:/MP-Desktop-Messenger/QT-Desktop-Messenger/out/build/debug/CMakeFiles/DesktopMessenger_autogen.dir

@@ -23,7 +23,7 @@ private:
 
 private slots:
     void showButtonPressed();
-    void hideButtonPressed();
+    void clearInput();
 };
 
 #endif // REGISTRATION_H

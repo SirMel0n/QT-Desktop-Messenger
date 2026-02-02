@@ -1,0 +1,79 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Debug-849dc15432ed15422df1.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "DesktopMessenger",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "DesktopMessenger::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-DesktopMessenger-Debug-f8cf615f8061f73acba6.json",
+					"name" : "DesktopMessenger",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "DesktopMessenger_autogen::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-DesktopMessenger_autogen-Debug-e2add3bffbe0fe669b22.json",
+					"name" : "DesktopMessenger_autogen",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "DesktopMessenger_autogen_timestamp_deps::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-DesktopMessenger_autogen_timestamp_deps-Debug-e8265b093cea16fefec5.json",
+					"name" : "DesktopMessenger_autogen_timestamp_deps",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "D:/MP-Desktop-Messenger/QT-Desktop-Messenger/out/build/debug",
+		"source" : "D:/MP-Desktop-Messenger/QT-Desktop-Messenger"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 8
+	}
+}
