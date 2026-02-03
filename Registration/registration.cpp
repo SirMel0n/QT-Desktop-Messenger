@@ -16,7 +16,7 @@ Registration::Registration(QWidget *parent)
 
 
     // set the title
-    setWindowTitle("SignUp");
+    setWindowTitle("Sign Up");
 
     // Telegram Dark Theme Palette
     this->setStyleSheet(
@@ -83,6 +83,11 @@ Registration::Registration(QWidget *parent)
     // Set password field to hide text with bullets/asterisks
     ui->passwordEdit->setEchoMode(QLineEdit::Password);
 
+    //set the length of input fields
+    ui->loginEdit->setMaxLength(12);
+    ui->nickEdit->setMaxLength(12);
+    ui->passwordEdit->setMaxLength(12);
+
 
 }
 
@@ -95,10 +100,10 @@ void Registration::showButtonPressed() {
 
     if(ui->passwordEdit->echoMode()==QLineEdit::Password) {
         ui->passwordEdit -> setEchoMode(QLineEdit::Normal);
-        ui ->showButton ->setText("hide");
+        ui ->showButton ->setText("Hide");
     } else if(ui->passwordEdit->echoMode()==QLineEdit::Normal) {
         ui->passwordEdit -> setEchoMode(QLineEdit::Password);
-        ui->showButton->setText("show");
+        ui->showButton->setText("Show");
     }
 
 }
