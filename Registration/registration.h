@@ -2,6 +2,12 @@
 #define REGISTRATION_H
 
 #include <QWidget>
+#include "QLabel"
+#include "QPushButton"
+#include "QLineEdit"
+#include "QSqlDatabase"
+#include "QSqlError"
+#include "QMessageBox"
 
 namespace Ui {
 class Registration;
@@ -20,10 +26,12 @@ private:
     QString loginVal;
     QString nickVal;
     QString passVal;
+    QSqlDatabase db;
 
 private slots:
     void showButtonPressed();
     void clearInput();
+    bool connectToDatabase();
 };
 
 #endif // REGISTRATION_H

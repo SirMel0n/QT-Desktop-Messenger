@@ -3,6 +3,8 @@
 #include "QLabel"
 #include "QPushButton"
 #include "QLineEdit"
+#include "QSqlDatabase"
+#include "QSqlError"
 
 
 Registration::Registration(QWidget *parent)
@@ -75,6 +77,9 @@ Registration::Registration(QWidget *parent)
     // connect cancel button
     connect(ui->cancelButton,&QPushButton::clicked,this,&Registration::clearInput);
 
+    //connect apply button
+    connect(ui->applyButton, &QPushButton::clicked,this, &Registration::connectToDatabase);
+
     // Set placeholder text for input fields
     ui->loginEdit->setPlaceholderText("Login");
     ui->nickEdit->setPlaceholderText("Nickname");
@@ -93,6 +98,10 @@ Registration::Registration(QWidget *parent)
 
 Registration::~Registration()
 {
+    // Close database connection
+    if (db.isOpen()) {
+        db.close();
+    }
     delete ui;
 }
 
@@ -112,4 +121,52 @@ void Registration::clearInput() {
     ui->loginEdit->clear();
     ui->nickEdit->clear();
     ui->passwordEdit->clear();
+}
+
+// function for connection to the database
+bool Registration::connectToDatabase()
+{
+
+    // get input values
+    loginVal = ui->loginEdit->text().trimmed();
+    nickVal = ui->nickEdit->text().trimmed();
+    passVal = ui->passwordEdit->text().trimmed();
+
+    // validate input
+    if (loginVal.isEmpty() || nickVal.isEmpty() || passVal.isEmpty()) {
+        QMessageBox::warning(this, "Input Error", "Please fill in all fields.");
+        return false;
+    }
+
+    // Check if connection already exists and is open
+    if (db.isOpen()) {
+        qDebug() << "database is connected";
+        return true; // Already connected
+
+    }
+
+    // Check if database object has been initialized but not opened
+    if (!db.isValid()) {
+        // ads QODBC drivers
+        db = QSqlDatabase::addDatabase("QODBC");
+
+        // Set the connection details
+        db.setDatabaseName("DRIVER={MySQL ODBC 9.6 Unicode Driver};"
+                           "SERVER=localhost;"
+                           "PORT=3306;"
+                           "USER=qtapp;"
+                           "PASSWORD=123456789;"
+                           "OPTION=3;");
+    }
+
+    // Step 3: Open the connection
+    if (!db.open()) {
+        // If connection fails, show error message
+        QMessageBox::critical(this, "Database Error",
+                              "Failed to connect to database:\n" +
+                                  db.lastError().text());
+        return false;
+    }
+
+    return true;
 }

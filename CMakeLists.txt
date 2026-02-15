@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 project(DesktopMessenger LANGUAGES CXX)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Gui Sql)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 qt_standard_project_setup()
@@ -21,6 +21,8 @@ target_link_libraries(DesktopMessenger
     PRIVATE
         Qt::Core
         Qt::Widgets
+        Qt::Sql
+        Qt::Gui
 )
 target_link_libraries(DesktopMessenger PRIVATE Qt6::Widgets)
 
