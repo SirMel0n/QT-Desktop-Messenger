@@ -1,13 +1,13 @@
 #ifndef AUTHENTICATION_H
 #define AUTHENTICATION_H
 
-#include "../appwindow.h"
+#include "../Registration/registration.h" // includes registration class
 
 namespace Ui {
 class Authentication;
 }
 
-class Authentication : public AppWindow
+class Authentication : public Registration
 {
     Q_OBJECT
 

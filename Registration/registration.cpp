@@ -1,4 +1,4 @@
-#include "registration.h"
+﻿#include "registration.h"
 #include "./Registration/ui_registration.h"
 #include "QLabel"
 #include "QPushButton"
@@ -126,8 +126,7 @@ void Registration::clearInput() {
 // function for connection to the database
 bool Registration::connectToDatabase()
 {
-
-    // get input values
+    //  get input values
     loginVal = ui->loginEdit->text().trimmed();
     nickVal = ui->nickEdit->text().trimmed();
     passVal = ui->passwordEdit->text().trimmed();
@@ -138,35 +137,117 @@ bool Registration::connectToDatabase()
         return false;
     }
 
-    // Check if connection already exists and is open
+    // Step 3: Check if connection already exists and is open
     if (db.isOpen()) {
-        qDebug() << "database is connected";
-        return true; // Already connected
-
+        qDebug() << "Database already connected";
+        // Connection exists, proceed with registration
+        return registerUser();
     }
 
-    // Check if database object has been initialized but not opened
+    // check if database object has been initialized but not opened
     if (!db.isValid()) {
-        // ads QODBC drivers
+        // add ODBC driver
         db = QSqlDatabase::addDatabase("QODBC");
 
-        // Set the connection details
+        // set connection string
         db.setDatabaseName("DRIVER={MySQL ODBC 9.6 Unicode Driver};"
                            "SERVER=localhost;"
                            "PORT=3306;"
+                           "DATABASE=qtappdb;"
                            "USER=qtapp;"
                            "PASSWORD=123456789;"
                            "OPTION=3;");
     }
 
-    // Step 3: Open the connection
+    // open the connection
     if (!db.open()) {
-        // If connection fails, show error message
+        // if connection fails, show error message
         QMessageBox::critical(this, "Database Error",
                               "Failed to connect to database:\n" +
                                   db.lastError().text());
         return false;
     }
+
+    qDebug() << "Database connected successfully";
+
+    // proceed with registration
+    return registerUser();
+}
+
+bool Registration::registerUser()
+{
+    // verify connection
+    if (!db.isOpen()) {
+        QMessageBox::critical(this, "Connection Error", "Database connection is not open.");
+        return false;
+    }
+
+    // check if username already exists
+    QSqlQuery checkQuery(db);
+    checkQuery.prepare("SELECT COUNT(*) FROM users WHERE username = ?");
+    checkQuery.addBindValue(nickVal);
+
+    if (checkQuery.exec() && checkQuery.next()) {
+        int count = checkQuery.value(0).toInt();
+        if (count > 0) {
+            QMessageBox::warning(this, "Username Taken",
+                                 "The username '" + nickVal + "' is already taken.\n"
+                                                              "Please choose a different username.");
+            return false;
+        }
+    }
+
+    // check if login already exists
+    QSqlQuery checkLoginQuery(db);
+    checkLoginQuery.prepare("SELECT COUNT(*) FROM users WHERE login = ?");
+    checkLoginQuery.addBindValue(loginVal);
+
+    if (checkLoginQuery.exec() && checkLoginQuery.next()) {
+        int count = checkLoginQuery.value(0).toInt();
+        if (count > 0) {
+            QMessageBox::warning(this, "Login Taken",
+                                 "The login '" + loginVal + "' is already taken.\n"
+                                                            "Please choose a different login.");
+            return false;
+        }
+    }
+
+    // prepare insert query
+    QSqlQuery query(db);
+    query.prepare("INSERT INTO users (username, password, login) VALUES (?, ?, ?)");
+    query.addBindValue(nickVal);
+    query.addBindValue(passVal);
+    query.addBindValue(loginVal);
+
+    // execute the query
+    if (!query.exec()) {
+        // handle specific error codes
+        QString errorText = query.lastError().text();
+
+        // check if the input value is already in the database
+        if (errorText.contains("Duplicate entry")) {
+            QMessageBox::warning(this, "Duplicate Entry",
+                                 "This username or login already exists.\n"
+                                 "Please try different credentials.");
+        } else {
+            QMessageBox::critical(this, "Registration Error",
+                                  "Failed to register user:\n" + errorText);
+            qDebug() << "SQL Error:" << query.lastError().text();
+            qDebug() << "Driver Error:" << query.lastError().driverText();
+            qDebug() << "Database Error:" << query.lastError().databaseText();
+        }
+        return false;
+    }
+
+    // display if the user is successfully regesitered
+    QMessageBox::information(this, "Success",
+                             "User registered successfully!\n"
+                             "Username: " + nickVal);
+
+    qDebug() << "User registered:" << loginVal;
+
+    // clear the input fields after successful registration
+    clearInput();
 
     return true;
 }

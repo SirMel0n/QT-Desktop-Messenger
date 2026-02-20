@@ -7,7 +7,9 @@
 #include "QLineEdit"
 #include "QSqlDatabase"
 #include "QSqlError"
+#include "QSqlQuery"
 #include "QMessageBox"
+#include <QDebug>
 
 namespace Ui {
 class Registration;
@@ -32,6 +34,7 @@ private slots:
     void showButtonPressed();
     void clearInput();
     bool connectToDatabase();
+    bool registerUser();
 };
 
 #endif // REGISTRATION_H
