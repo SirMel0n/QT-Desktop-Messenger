@@ -1,21 +1,22 @@
 #ifndef REGISTRATION_H
 #define REGISTRATION_H
 
+#include "../Database/database.h"
 #include <QWidget>
-#include "QLabel"
-#include "QPushButton"
-#include "QLineEdit"
-#include "QSqlDatabase"
-#include "QSqlError"
-#include "QSqlQuery"
-#include "QMessageBox"
+#include <QLabel>
+#include <QPushButton>
+#include <QLineEdit>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
+#include <QMessageBox>
 #include <QDebug>
 
 namespace Ui {
 class Registration;
 }
 
-class Registration : public QWidget
+class Registration : public Database
 {
     Q_OBJECT
 
@@ -25,15 +26,10 @@ public:
 
 private:
     Ui::Registration *ui;
-    QString loginVal;
-    QString nickVal;
-    QString passVal;
-    QSqlDatabase db;
 
 private slots:
     void showButtonPressed();
     void clearInput();
-    bool connectToDatabase();
     bool registerUser();
 };
 

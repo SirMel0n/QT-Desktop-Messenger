@@ -1,13 +1,13 @@
 #ifndef AUTHENTICATION_H
 #define AUTHENTICATION_H
 
-#include "../Registration/registration.h" // includes registration class
+#include "../Database/database.h"
 
 namespace Ui {
 class Authentication;
 }
 
-class Authentication : public Registration
+class Authentication : public Database
 {
     Q_OBJECT
 
@@ -17,6 +17,14 @@ public:
 
 private:
     Ui::Authentication *ui;
+
+private slots:
+    void showButtonPressed();
+    void clearInput();
+    bool authenticateUser();
+
+signals:
+    void loginSuccessful(const QString& username);
 };
 
 #endif // AUTHENTICATION_H

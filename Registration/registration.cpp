@@ -1,21 +1,19 @@
 ﻿#include "registration.h"
 #include "./Registration/ui_registration.h"
-#include "QLabel"
-#include "QPushButton"
-#include "QLineEdit"
-#include "QSqlDatabase"
-#include "QSqlError"
-
+#include <QLabel>
+#include <QPushButton>
+#include <QLineEdit>
+#include <QSqlDatabase>
+#include <QSqlError>
 
 Registration::Registration(QWidget *parent)
-    : QWidget(parent)
+    : Database(parent)  // Changed from QWidget to Database
     , ui(new Ui::Registration)
-    , passVal(" ")
-    , nickVal(" ")
-    , loginVal(" ")
 {
+    // Remove initialization of inherited members:
+    // passVal, nickVal, loginVal are initialized in Database constructor
+    
     ui->setupUi(this);
-
 
     // set the title
     setWindowTitle("Sign Up");
@@ -71,14 +69,30 @@ Registration::Registration(QWidget *parent)
         "font-weight: bold;"
     );
 
-    //connect show button to the fucntion
-    connect(ui->showButton, &QPushButton::clicked,this , &Registration::showButtonPressed);
+    // connect show button to the function
+    connect(ui->showButton, &QPushButton::clicked, this, &Registration::showButtonPressed);
 
     // connect cancel button
-    connect(ui->cancelButton,&QPushButton::clicked,this,&Registration::clearInput);
+    connect(ui->cancelButton, &QPushButton::clicked, this, &Registration::clearInput);
 
-    //connect apply button
-    connect(ui->applyButton, &QPushButton::clicked,this, &Registration::connectToDatabase);
+    // connect apply button - now calls the inherited connectToDatabase and registerUser
+    connect(ui->applyButton, &QPushButton::clicked, this, [this]() {
+        // Get input values
+        loginVal = ui->loginEdit->text().trimmed();
+        nickVal = ui->nickEdit->text().trimmed();
+        passVal = ui->passwordEdit->text().trimmed();
+
+        // Validate input
+        if (loginVal.isEmpty() || nickVal.isEmpty() || passVal.isEmpty()) {
+            QMessageBox::warning(this, "Input Error", "Please fill in all fields.");
+            return;
+        }
+
+        // Connect to database using inherited method
+        if (connectToDatabase()) {
+            registerUser();
+        }
+    });
 
     // Set placeholder text for input fields
     ui->loginEdit->setPlaceholderText("Login");
@@ -88,90 +102,32 @@ Registration::Registration(QWidget *parent)
     // Set password field to hide text with bullets/asterisks
     ui->passwordEdit->setEchoMode(QLineEdit::Password);
 
-    //set the length of input fields
+    // set the length of input fields
     ui->loginEdit->setMaxLength(12);
     ui->nickEdit->setMaxLength(12);
     ui->passwordEdit->setMaxLength(12);
-
-
 }
 
 Registration::~Registration()
 {
-    // Close database connection
-    if (db.isOpen()) {
-        db.close();
-    }
+    // Database destructor will handle closing the connection
     delete ui;
 }
 
 void Registration::showButtonPressed() {
-
-    if(ui->passwordEdit->echoMode()==QLineEdit::Password) {
-        ui->passwordEdit -> setEchoMode(QLineEdit::Normal);
-        ui ->showButton ->setText("Hide");
-    } else if(ui->passwordEdit->echoMode()==QLineEdit::Normal) {
-        ui->passwordEdit -> setEchoMode(QLineEdit::Password);
+    if(ui->passwordEdit->echoMode() == QLineEdit::Password) {
+        ui->passwordEdit->setEchoMode(QLineEdit::Normal);
+        ui->showButton->setText("Hide");
+    } else if(ui->passwordEdit->echoMode() == QLineEdit::Normal) {
+        ui->passwordEdit->setEchoMode(QLineEdit::Password);
         ui->showButton->setText("Show");
     }
-
 }
 
 void Registration::clearInput() {
     ui->loginEdit->clear();
     ui->nickEdit->clear();
     ui->passwordEdit->clear();
-}
-
-// function for connection to the database
-bool Registration::connectToDatabase()
-{
-    //  get input values
-    loginVal = ui->loginEdit->text().trimmed();
-    nickVal = ui->nickEdit->text().trimmed();
-    passVal = ui->passwordEdit->text().trimmed();
-
-    // validate input
-    if (loginVal.isEmpty() || nickVal.isEmpty() || passVal.isEmpty()) {
-        QMessageBox::warning(this, "Input Error", "Please fill in all fields.");
-        return false;
-    }
-
-    // Step 3: Check if connection already exists and is open
-    if (db.isOpen()) {
-        qDebug() << "Database already connected";
-        // Connection exists, proceed with registration
-        return registerUser();
-    }
-
-    // check if database object has been initialized but not opened
-    if (!db.isValid()) {
-        // add ODBC driver
-        db = QSqlDatabase::addDatabase("QODBC");
-
-        // set connection string
-        db.setDatabaseName("DRIVER={MySQL ODBC 9.6 Unicode Driver};"
-                           "SERVER=localhost;"
-                           "PORT=3306;"
-                           "DATABASE=qtappdb;"
-                           "USER=qtapp;"
-                           "PASSWORD=123456789;"
-                           "OPTION=3;");
-    }
-
-    // open the connection
-    if (!db.open()) {
-        // if connection fails, show error message
-        QMessageBox::critical(this, "Database Error",
-                              "Failed to connect to database:\n" +
-                                  db.lastError().text());
-        return false;
-    }
-
-    qDebug() << "Database connected successfully";
-
-    // proceed with registration
-    return registerUser();
 }
 
 bool Registration::registerUser()
@@ -181,6 +137,14 @@ bool Registration::registerUser()
         QMessageBox::critical(this, "Connection Error", "Database connection is not open.");
         return false;
     }
+
+    // check the length of the login is at least 5 characters
+    if(loginVal.size() <= 5) {
+        QMessageBox::critical(this, "Input error",
+                              "Login must contain minimum 5 characters");
+        return false;
+    }
+
 
     // check if username already exists
     QSqlQuery checkQuery(db);
@@ -192,7 +156,7 @@ bool Registration::registerUser()
         if (count > 0) {
             QMessageBox::warning(this, "Username Taken",
                                  "The username '" + nickVal + "' is already taken.\n"
-                                                              "Please choose a different username.");
+                                 "Please choose a different username.");
             return false;
         }
     }
@@ -207,7 +171,7 @@ bool Registration::registerUser()
         if (count > 0) {
             QMessageBox::warning(this, "Login Taken",
                                  "The login '" + loginVal + "' is already taken.\n"
-                                                            "Please choose a different login.");
+                                 "Please choose a different login.");
             return false;
         }
     }
@@ -239,7 +203,7 @@ bool Registration::registerUser()
         return false;
     }
 
-    // display if the user is successfully regesitered
+    // display if the user is successfully registered
     QMessageBox::information(this, "Success",
                              "User registered successfully!\n"
                              "Username: " + nickVal);
