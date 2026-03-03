@@ -24,8 +24,6 @@ class Database : public QWidget
 public:
     explicit Database(QWidget *parent = nullptr);
     virtual ~Database();
-
-protected:
     QSqlDatabase db;
     QString loginVal;
     QString nickVal;
@@ -33,6 +31,9 @@ protected:
 
     bool connectToDatabase();
     bool initializeConnection();
+
+protected:
+
 };
 
 #endif // DATABASE_H

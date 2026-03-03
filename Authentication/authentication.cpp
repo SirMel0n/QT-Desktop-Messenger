@@ -7,8 +7,9 @@
 #include <QSqlError>
 
 Authentication::Authentication(QWidget *parent)
-    : Database(parent)
+    : QDialog(parent)
     , ui(new Ui::Authentication)
+    , m_database(new Database(this))
 {
     ui->setupUi(this);
 
@@ -60,7 +61,7 @@ Authentication::Authentication(QWidget *parent)
         "    background-color: transparent; "
         "    border: none; "
         "}"
-    );
+        );
 
     // set style sheet for the QlineText
     ui->signInText->setStyleSheet(
@@ -68,7 +69,7 @@ Authentication::Authentication(QWidget *parent)
         "color: #5288C1; "
         "font-size: 24px; "
         "font-weight: bold;"
-    );
+        );
 
     // connect show button to the function
     connect(ui->showButton, &QPushButton::clicked, this, &Authentication::showButtonPressed);
@@ -79,17 +80,17 @@ Authentication::Authentication(QWidget *parent)
     // Connect apply button, so it will call the inherited connectToDatabase and authenticateUser
     connect(ui->applyButton, &QPushButton::clicked, this, [this]() {
         // Get input values
-        loginVal = ui->loginEdit->text().trimmed();
-        passVal = ui->passwordEdit->text().trimmed();
+        m_database->loginVal = ui->loginEdit->text().trimmed();
+        m_database->passVal = ui->passwordEdit->text().trimmed();
 
         // Validate input
-        if (loginVal.isEmpty() || passVal.isEmpty()) {
+        if (m_database->loginVal.isEmpty() || m_database->passVal.isEmpty()) {
             QMessageBox::warning(this, "Input Error", "Please fill in all fields.");
             return;
         }
 
         // Connect to database using inherited method
-        if (connectToDatabase()) {
+        if (m_database->connectToDatabase()) {
             authenticateUser();
         }
     });
@@ -130,16 +131,23 @@ void Authentication::clearInput()
 
 bool Authentication::authenticateUser()
 {
+    // check the length of the login is at least 5 characters FIRST
+    if(m_database->loginVal.size() < 5) {  // Changed <= to <
+        QMessageBox::critical(this, "Input error",
+                              "Login must contain at least 5 characters");
+        return false;
+    }
+
     // Verify connection
-    if (!db.isOpen()) {
+    if (!m_database->db.isOpen()) {
         QMessageBox::critical(this, "Connection Error", "Database connection is not open.");
         return false;
     }
 
     // Escape single quotes to prevent SQL injection
-    QString escapedLogin = loginVal;
-    QString escapedPass = passVal;
-    
+    QString escapedLogin = m_database->loginVal;
+    QString escapedPass = m_database->passVal;
+
     escapedLogin.replace("'", "''");
     escapedPass.replace("'", "''");
 
@@ -147,9 +155,9 @@ bool Authentication::authenticateUser()
     QString queryStr = QString("SELECT username FROM users WHERE login = '%1' AND password = '%2'")
                            .arg(escapedLogin, escapedPass);
 
-    qDebug() << "Executing authentication query for user:" << loginVal;
+    qDebug() << "Executing authentication query for user:" << m_database->loginVal;
 
-    QSqlQuery query(db);
+    QSqlQuery query(m_database->db);
 
     // Execute the query directly
     if (!query.exec(queryStr)) {
@@ -164,7 +172,7 @@ bool Authentication::authenticateUser()
 
 
     // check the length of the login is at least 5 characters
-    if(loginVal.size() <= 5) {
+    if(m_database->loginVal.size() <= 5) {
         QMessageBox::critical(this, "Input error",
                               "Login must contain minimum 5 characters");
         return false;
@@ -178,7 +186,7 @@ bool Authentication::authenticateUser()
                                  "Login successful!\n"
                                  "Welcome, " + username + "!");
 
-        qDebug() << "User authenticated:" << loginVal;
+        qDebug() << "User authenticated:" << m_database->loginVal;
 
         // Clear the input fields after successful login
         clearInput();
@@ -186,12 +194,14 @@ bool Authentication::authenticateUser()
         // TODO: Navigate to main application window
         emit loginSuccessful(username);
 
+        accept();
+
         return true;
     } else {
         QMessageBox::warning(this, "Authentication Failed",
                              "Invalid login or password.\n"
                              "Please try again.");
-        qDebug() << "No matching user found for login:" << loginVal;
+        qDebug() << "No matching user found for login:" << m_database->loginVal;
         return false;
     }
 }

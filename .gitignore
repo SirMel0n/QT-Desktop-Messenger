@@ -107,7 +107,7 @@ release/
 *.sln.docstates
 *.VC.db
 *.VC.opendb
-
+*.vs
 # CMake
 CMakeCache.txt
 CMakeFiles/

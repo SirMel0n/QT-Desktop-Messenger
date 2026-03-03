@@ -7,7 +7,7 @@ namespace Ui {
 class Authentication;
 }
 
-class Authentication : public Database
+class Authentication : public QDialog
 {
     Q_OBJECT
 
@@ -17,6 +17,7 @@ public:
 
 private:
     Ui::Authentication *ui;
+    Database *m_database;
 
 private slots:
     void showButtonPressed();
@@ -25,6 +26,7 @@ private slots:
 
 signals:
     void loginSuccessful(const QString& username);
+
 };
 
 #endif // AUTHENTICATION_H
