@@ -19,8 +19,8 @@
      <rect>
       <x>50</x>
       <y>10</y>
-      <width>274</width>
-      <height>273</height>
+      <width>351</width>
+      <height>331</height>
      </rect>
     </property>
     <property name="title">
@@ -44,8 +44,8 @@
       <widget class="QPushButton" name="btnSend">
        <property name="minimumSize">
         <size>
-         <width>70</width>
-         <height>10</height>
+         <width>0</width>
+         <height>0</height>
         </size>
        </property>
        <property name="text">

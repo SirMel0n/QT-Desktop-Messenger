@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include "TcpSocket.h"
 #include "Authentication/authentication.h"
+#include <QShortcut>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -31,6 +32,7 @@ private:
     Ui::MainWindow *ui;
     TcpSocket *m_tcpSocket;
     Authentication *m_auth;
+    QShortcut *shortcut;
 };
 
 #endif // MAINWINDOW_H

@@ -11,7 +11,7 @@ int main(int argc, char *argv[])
     // Show authentication first
     Authentication auth;
 
-    // If authentication is successful, show MainWindow
+    // execute after successful authentication
     if (auth.exec() == QDialog::Accepted) {
         MainWindow w;
         w.show();
