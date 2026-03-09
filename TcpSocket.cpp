@@ -29,7 +29,7 @@ void TcpSocket::disconnectFromServer()
 void TcpSocket::sendMessage(const QString &message)
 {
     if (!isConnected()) return;
-    QByteArray data = message.toUtf8() + "\n";  // newline as message delimiter
+    QByteArray data = message.toUtf8();  // newline as message delimiter
     m_socket->write(data);
 }
 

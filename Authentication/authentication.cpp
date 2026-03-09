@@ -1,15 +1,10 @@
 #include "authentication.h"
 #include "ui_authentication.h"
-#include <QLabel>
-#include <QPushButton>
-#include <QLineEdit>
-#include <QSqlDatabase>
-#include <QSqlError>
 
 Authentication::Authentication(QWidget *parent)
     : QDialog(parent)
     , ui(new Ui::Authentication)
-    , m_database(new Database(this))
+    , m_socket(new QTcpSocket(this))
 {
     ui->setupUi(this);
 
@@ -71,29 +66,20 @@ Authentication::Authentication(QWidget *parent)
         "font-weight: bold;"
         );
 
+    // Connect socket signals
+    connect(m_socket, &QTcpSocket::connected, this, &Authentication::onConnected);
+    connect(m_socket, &QTcpSocket::disconnected, this, &Authentication::onDisconnected);
+    connect(m_socket, &QTcpSocket::readyRead, this, &Authentication::onReadyRead);
+    connect(m_socket, &QAbstractSocket::errorOccurred, this, &Authentication::onSocketError);
+
     // connect show button to the function
     connect(ui->showButton, &QPushButton::clicked, this, &Authentication::showButtonPressed);
 
     // connect cancel button to the function
     connect(ui->cancelButton, &QPushButton::clicked, this, &Authentication::clearInput);
 
-    // Connect apply button, so it will call the inherited connectToDatabase and authenticateUser
-    connect(ui->applyButton, &QPushButton::clicked, this, [this]() {
-        // Get input values
-        m_database->loginVal = ui->loginEdit->text().trimmed();
-        m_database->passVal = ui->passwordEdit->text().trimmed();
-
-        // Validate input
-        if (m_database->loginVal.isEmpty() || m_database->passVal.isEmpty()) {
-            QMessageBox::warning(this, "Input Error", "Please fill in all fields.");
-            return;
-        }
-
-        // Connect to database using inherited method
-        if (m_database->connectToDatabase()) {
-            authenticateUser();
-        }
-    });
+    // Connect apply button to authenticate user
+    connect(ui->applyButton, &QPushButton::clicked, this, &Authentication::authenticateUser);
 
     // set placeholder text for input fields
     ui->loginEdit->setPlaceholderText("Login");
@@ -103,13 +89,22 @@ Authentication::Authentication(QWidget *parent)
     ui->passwordEdit->setEchoMode(QLineEdit::Password);
 
     // set the length of input fields
-    ui->loginEdit->setMaxLength(12);
-    ui->passwordEdit->setMaxLength(12);
+    ui->loginEdit->setMaxLength(20);
+    ui->passwordEdit->setMaxLength(20);
 }
 
 Authentication::~Authentication()
 {
+    if (m_socket->state() != QAbstractSocket::UnconnectedState) {
+        m_socket->disconnectFromHost();
+    }
     delete ui;
+}
+
+void Authentication::connectToServer(const QString &host, quint16 port)
+{
+    qDebug() << "Connecting to authentication server:" << host << ":" << port;
+    m_socket->connectToHost(host, port);
 }
 
 void Authentication::showButtonPressed()
@@ -129,79 +124,96 @@ void Authentication::clearInput()
     ui->passwordEdit->clear();
 }
 
-bool Authentication::authenticateUser()
+void Authentication::authenticateUser()
 {
-    // check the length of the login is at least 5 characters FIRST
-    if(m_database->loginVal.size() < 5) {  // Changed <= to <
+    // Get input values
+    m_pendingLogin = ui->loginEdit->text().trimmed();
+    m_pendingPassword = ui->passwordEdit->text().trimmed();
+
+    // Validate input
+    if (m_pendingLogin.isEmpty() || m_pendingPassword.isEmpty()) {
+        QMessageBox::warning(this, "Input Error", "Please fill in all fields.");
+        return;
+    }
+
+    // Check the length of the login is at least 5 characters
+    if (m_pendingLogin.size() < 5) {
         QMessageBox::critical(this, "Input error",
                               "Login must contain at least 5 characters");
-        return false;
+        return;
     }
 
-    // Verify connection
-    if (!m_database->db.isOpen()) {
-        QMessageBox::critical(this, "Connection Error", "Database connection is not open.");
-        return false;
+    // Check if connected to server
+    if (m_socket->state() != QAbstractSocket::ConnectedState) {
+        QMessageBox::critical(this, "Connection Error",
+                              "Not connected to server. Please try again.");
+        return;
     }
 
-    // Escape single quotes to prevent SQL injection
-    QString escapedLogin = m_database->loginVal;
-    QString escapedPass = m_database->passVal;
+    // Send authentication request to server
+    QString authRequest = QString("AUTH:%1:%2\n").arg(m_pendingLogin, m_pendingPassword);
+    m_socket->write(authRequest.toUtf8());
+    m_socket->flush();
 
-    escapedLogin.replace("'", "''");
-    escapedPass.replace("'", "''");
+    qDebug() << "Sent authentication request for user:" << m_pendingLogin;
+}
 
-    // Build query directly (workaround for ODBC issues)
-    QString queryStr = QString("SELECT username FROM users WHERE login = '%1' AND password = '%2'")
-                           .arg(escapedLogin, escapedPass);
+void Authentication::onConnected()
+{
+    qDebug() << "Connected to authentication server";
+}
 
-    qDebug() << "Executing authentication query for user:" << m_database->loginVal;
+void Authentication::onDisconnected()
+{
+    qDebug() << "Disconnected from authentication server";
+}
 
-    QSqlQuery query(m_database->db);
+void Authentication::onReadyRead()
+{
+    while (m_socket->canReadLine()) {
+        QString response = QString::fromUtf8(m_socket->readLine()).trimmed();
+        qDebug() << "Received from server:" << response;
 
-    // Execute the query directly
-    if (!query.exec(queryStr)) {
-        QMessageBox::critical(this, "Authentication Error",
-                              "Failed to authenticate:\n" +
-                                  query.lastError().text());
-        qDebug() << "SQL Error:" << query.lastError().text();
-        qDebug() << "Driver Error:" << query.lastError().driverText();
-        qDebug() << "Database Error:" << query.lastError().databaseText();
-        return false;
+        // Parse server response
+        if (response.startsWith("AUTH_SUCCESS:")) {
+            QString username = response.mid(13); // Extract username after "AUTH_SUCCESS:"
+
+            QMessageBox::information(this, "Success",
+                                     "Login successful!\n"
+                                     "Welcome, " + username + "!");
+
+            qDebug() << "User authenticated:" << m_pendingLogin << "Username:" << username;
+
+            // Clear the input fields after successful login
+            clearInput();
+
+            // Emit success signal with username and password
+            emit loginSuccessful(username, m_pendingPassword);
+
+            accept();
+        }
+        else if (response == "AUTH_FAILED") {
+            QMessageBox::warning(this, "Authentication Failed",
+                                 "Invalid login or password.\n"
+                                 "Please try again.");
+            qDebug() << "Authentication failed for login:" << m_pendingLogin;
+        }
+        else if (response.startsWith("ERROR:")) {
+            QString errorMsg = response.mid(6); // Extract error message
+            QMessageBox::critical(this, "Server Error", errorMsg);
+            qDebug() << "Server error:" << errorMsg;
+        }
     }
+}
 
+void Authentication::onSocketError(QAbstractSocket::SocketError socketError)
+{
+    Q_UNUSED(socketError);
+    QString errorMsg = m_socket->errorString();
+    qCritical() << "Socket error:" << errorMsg;
 
-    // check the length of the login is at least 5 characters
-    if(m_database->loginVal.size() <= 5) {
-        QMessageBox::critical(this, "Input error",
-                              "Login must contain minimum 5 characters");
-        return false;
-    }
+    QMessageBox::critical(this, "Connection Error",
+                          "Failed to connect to server:\n" + errorMsg);
 
-    // Check if user found
-    if (query.next()) {
-        QString username = query.value(0).toString();
-
-        QMessageBox::information(this, "Success",
-                                 "Login successful!\n"
-                                 "Welcome, " + username + "!");
-
-        qDebug() << "User authenticated:" << m_database->loginVal;
-
-        // Clear the input fields after successful login
-        clearInput();
-
-        // TODO: Navigate to main application window
-        emit loginSuccessful(username);
-
-        accept();
-
-        return true;
-    } else {
-        QMessageBox::warning(this, "Authentication Failed",
-                             "Invalid login or password.\n"
-                             "Please try again.");
-        qDebug() << "No matching user found for login:" << m_database->loginVal;
-        return false;
-    }
+    emit serverConnectionFailed(errorMsg);
 }

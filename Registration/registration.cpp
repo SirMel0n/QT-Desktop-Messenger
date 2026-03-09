@@ -7,8 +7,9 @@
 #include <QSqlError>
 
 Registration::Registration(QWidget *parent)
-    : Database(parent)  // Changed from QWidget to Database
+    : QDialog(parent)
     , ui(new Ui::Registration)
+    , m_socket(new QTcpSocket(this))
 {
     // Remove initialization of inherited members:
     // passVal, nickVal, loginVal are initialized in Database constructor
@@ -69,6 +70,13 @@ Registration::Registration(QWidget *parent)
         "font-weight: bold;"
     );
 
+
+    // Connect socket signals
+    connect(m_socket, &QTcpSocket::connected, this, &Registration::onConnected);
+    connect(m_socket, &QTcpSocket::disconnected, this, &Registration::onDisconnected);
+    connect(m_socket, &QTcpSocket::readyRead, this, &Registration::onReadyRead);
+    connect(m_socket, &QAbstractSocket::errorOccurred, this, &Registration::onSocketError);
+
     // connect show button to the function
     connect(ui->showButton, &QPushButton::clicked, this, &Registration::showButtonPressed);
 
@@ -76,23 +84,7 @@ Registration::Registration(QWidget *parent)
     connect(ui->cancelButton, &QPushButton::clicked, this, &Registration::clearInput);
 
     // connect apply button - now calls the inherited connectToDatabase and registerUser
-    connect(ui->applyButton, &QPushButton::clicked, this, [this]() {
-        // Get input values
-        loginVal = ui->loginEdit->text().trimmed();
-        nickVal = ui->nickEdit->text().trimmed();
-        passVal = ui->passwordEdit->text().trimmed();
-
-        // Validate input
-        if (loginVal.isEmpty() || nickVal.isEmpty() || passVal.isEmpty()) {
-            QMessageBox::warning(this, "Input Error", "Please fill in all fields.");
-            return;
-        }
-
-        // Connect to database using inherited method
-        if (connectToDatabase()) {
-            registerUser();
-        }
-    });
+    connect(ui->applyButton, &QPushButton::clicked, this, &Registration::registerUser);
 
     // Set placeholder text for input fields
     ui->loginEdit->setPlaceholderText("Login");
@@ -103,15 +95,22 @@ Registration::Registration(QWidget *parent)
     ui->passwordEdit->setEchoMode(QLineEdit::Password);
 
     // set the length of input fields
-    ui->loginEdit->setMaxLength(12);
-    ui->nickEdit->setMaxLength(12);
-    ui->passwordEdit->setMaxLength(12);
+    ui->loginEdit->setMaxLength(20);
+    ui->nickEdit->setMaxLength(20);
+    ui->passwordEdit->setMaxLength(20);
 }
 
 Registration::~Registration()
 {
     // Database destructor will handle closing the connection
     delete ui;
+}
+
+// connect to the server
+void Registration::connectToServer(const QString &host, quint16 port)
+{
+    qDebug() << "Connecting to authentication server:" << host << ":" << port;
+    m_socket->connectToHost(host, port);
 }
 
 void Registration::showButtonPressed() {
@@ -130,88 +129,99 @@ void Registration::clearInput() {
     ui->passwordEdit->clear();
 }
 
-bool Registration::registerUser()
+void Registration::registerUser()
 {
-    // verify connection
-    if (!db.isOpen()) {
-        QMessageBox::critical(this, "Connection Error", "Database connection is not open.");
-        return false;
+    // Get input values
+    m_pendingLogin = ui->loginEdit->text().trimmed();
+    m_pendingPassword = ui->passwordEdit->text().trimmed();
+    m_pendingUsername= ui ->nickEdit ->text().trimmed();
+
+    // Validate input
+    if (m_pendingLogin.isEmpty() || m_pendingPassword.isEmpty() || m_pendingUsername.isEmpty()) {
+        QMessageBox::warning(this, "Input Error", "Please fill in all fields.");
+        return;
     }
 
-    // check the length of the login is at least 5 characters
-    if(loginVal.size() <= 5) {
+    // Check the length of the login is at least 5 characters
+    if (m_pendingLogin.size() < 5) {
         QMessageBox::critical(this, "Input error",
-                              "Login must contain minimum 5 characters");
-        return false;
+                              "Login must contain at least 5 characters");
+        return;
     }
 
-
-    // check if username already exists
-    QSqlQuery checkQuery(db);
-    checkQuery.prepare("SELECT COUNT(*) FROM users WHERE username = ?");
-    checkQuery.addBindValue(nickVal);
-
-    if (checkQuery.exec() && checkQuery.next()) {
-        int count = checkQuery.value(0).toInt();
-        if (count > 0) {
-            QMessageBox::warning(this, "Username Taken",
-                                 "The username '" + nickVal + "' is already taken.\n"
-                                 "Please choose a different username.");
-            return false;
-        }
+    // Check if connected to server
+    if (m_socket->state() != QAbstractSocket::ConnectedState) {
+        QMessageBox::critical(this, "Connection Error",
+                              "Not connected to server. Please try again.");
+        return;
     }
 
-    // check if login already exists
-    QSqlQuery checkLoginQuery(db);
-    checkLoginQuery.prepare("SELECT COUNT(*) FROM users WHERE login = ?");
-    checkLoginQuery.addBindValue(loginVal);
+    // Send authentication request to server
+    QString regRequest = QString("REG:%1:%2:%3\n").arg(m_pendingLogin, m_pendingPassword, m_pendingUsername);
+    m_socket->write(regRequest.toUtf8());
+    m_socket->flush();
 
-    if (checkLoginQuery.exec() && checkLoginQuery.next()) {
-        int count = checkLoginQuery.value(0).toInt();
-        if (count > 0) {
-            QMessageBox::warning(this, "Login Taken",
-                                 "The login '" + loginVal + "' is already taken.\n"
-                                 "Please choose a different login.");
-            return false;
-        }
-    }
-
-    // prepare insert query
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO users (username, password, login) VALUES (?, ?, ?)");
-    query.addBindValue(nickVal);
-    query.addBindValue(passVal);
-    query.addBindValue(loginVal);
-
-    // execute the query
-    if (!query.exec()) {
-        // handle specific error codes
-        QString errorText = query.lastError().text();
-
-        // check if the input value is already in the database
-        if (errorText.contains("Duplicate entry")) {
-            QMessageBox::warning(this, "Duplicate Entry",
-                                 "This username or login already exists.\n"
-                                 "Please try different credentials.");
-        } else {
-            QMessageBox::critical(this, "Registration Error",
-                                  "Failed to register user:\n" + errorText);
-            qDebug() << "SQL Error:" << query.lastError().text();
-            qDebug() << "Driver Error:" << query.lastError().driverText();
-            qDebug() << "Database Error:" << query.lastError().databaseText();
-        }
-        return false;
-    }
-
-    // display if the user is successfully registered
-    QMessageBox::information(this, "Success",
-                             "User registered successfully!\n"
-                             "Username: " + nickVal);
-
-    qDebug() << "User registered:" << loginVal;
-
-    // clear the input fields after successful registration
-    clearInput();
-
-    return true;
+    qDebug() << "Sent authentication request for user:" << m_pendingLogin;
 }
+
+void Registration::onConnected()
+{
+    qDebug() << "Connected to authentication server";
+}
+
+void Registration::onDisconnected()
+{
+    qDebug() << "Connected to authentication server";
+}
+
+void Registration::onReadyRead()
+{
+    while (m_socket->canReadLine()) {
+        QString response = QString::fromUtf8(m_socket->readLine()).trimmed();
+        qDebug() << "Received from server:" << response;
+
+        // Parse server response
+        if (response.startsWith("REG_SUCCESS:")) {
+            QString username = response.mid(12); // Extract username after "AUTH_SUCCESS:"
+
+            QMessageBox::information(this, "Success",
+                                     "Login successful!\n"
+                                     "Welcome, " + username + "!");
+
+            qDebug() << "User registered:" << m_pendingLogin << "Username:" << username;
+
+            // Clear the input fields after successful login
+            clearInput();
+
+            // Emit success signal with username and password
+            emit loginSuccessful(username, m_pendingPassword);
+
+            accept();
+        }
+        else if (response == "REG_FAILED:") {
+            QString reason = response.mid(12);
+            QMessageBox::warning(this, "Registration Failed",
+                                 reason);
+            qDebug() << "Authentication failed for login:" << m_pendingLogin;
+        }
+        else if (response.startsWith("ERROR:")) {
+            QString errorMsg = response.mid(6); // Extract error message
+            QMessageBox::critical(this, "Server Error", errorMsg);
+            qDebug() << "Server error:" << errorMsg;
+        }
+    }
+}
+
+void Registration::onSocketError(QAbstractSocket::SocketError socketError)
+{
+    Q_UNUSED(socketError);
+    QString errorMsg = m_socket->errorString();
+    qCritical() << "Socket error:" << errorMsg;
+
+    QMessageBox::critical(this, "Connection Error",
+                          "Failed to connect to server:\n" + errorMsg);
+
+    emit serverConnectionFailed(errorMsg);
+}
+
+

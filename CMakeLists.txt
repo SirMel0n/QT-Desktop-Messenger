@@ -14,7 +14,6 @@ qt_add_executable(DesktopMessenger
     mainwindow.ui
     Authentication/authentication.h Authentication/authentication.cpp Authentication/authentication.ui
     Registration/registration.h Registration/registration.cpp Registration/registration.ui
-    Database/database.cpp Database/database.h
     TcpSocket.h TcpSocket.cpp
 )
 
