@@ -1,4 +1,4 @@
-﻿#include "registration.h"
+﻿    #include "registration.h"
 #include "./Registration/ui_registration.h"
 #include <QLabel>
 #include <QPushButton>
@@ -198,11 +198,12 @@ void Registration::onReadyRead()
 
             accept();
         }
-        else if (response == "REG_FAILED:") {
-            QString reason = response.mid(12);
-            QMessageBox::warning(this, "Registration Failed",
-                                 reason);
-            qDebug() << "Authentication failed for login:" << m_pendingLogin;
+        else if (response.startsWith("REG_FAILED:")) {
+            QString reason = response.mid(11);
+            QString message = QString("%1\nPlease try again.").arg(reason);
+            QMessageBox::warning(this, "Registration Failed", message);
+
+            qDebug() << "Registration failed for login:" << m_pendingLogin;
         }
         else if (response.startsWith("ERROR:")) {
             QString errorMsg = response.mid(6); // Extract error message

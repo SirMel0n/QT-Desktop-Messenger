@@ -192,10 +192,10 @@ void Authentication::onReadyRead()
 
             accept();
         }
-        else if (response == "AUTH_FAILED") {
-            QMessageBox::warning(this, "Authentication Failed",
-                                 "Invalid login or password.\n"
-                                 "Please try again.");
+        else if (response.startsWith("AUTH_FAILED:")) {
+            QString reason = response.mid(12);
+            QString message = QString("%1\nPlease try again.").arg(reason);
+            QMessageBox::warning(this, "Authentication Failed", message);
             qDebug() << "Authentication failed for login:" << m_pendingLogin;
         }
         else if (response.startsWith("ERROR:")) {
