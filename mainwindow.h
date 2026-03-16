@@ -1,4 +1,4 @@
-#ifndef MAINWINDOW_H
+    #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
 #include <QMainWindow>
@@ -27,6 +27,8 @@ private slots:
     void onSocketError(const QString &errorMsg);
     void on_btnSend_clicked();
     void onLoginSuccessful(const QString &username);
+
+    void on_btnSearch_clicked();
 
 private:
     Ui::MainWindow *ui;

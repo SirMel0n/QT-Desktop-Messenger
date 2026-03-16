@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QShortcut>  // Add this include
+#include "ConfigManager.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -24,7 +25,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_auth, &Authentication::loginSuccessful, this, &MainWindow::onLoginSuccessful);
 
     // Connect to server after showing auth dialog
-    m_tcpSocket->connectToServer("26.161.132.244", 12345);
+
+    m_tcpSocket->connectToServer(ConfigManager::instance().IpServer(), ConfigManager::instance().serverPort());
 }
 
 MainWindow::~MainWindow()
@@ -67,3 +69,14 @@ void MainWindow::onLoginSuccessful(const QString &username)
     ui->lstChat->addItem("Welcome: " + username);
 }
 
+
+void MainWindow::on_btnSearch_clicked()
+{
+    QString user_name = ui->lnSearch->text().trimmed();
+    int option = 1;
+
+    // send search request
+    QString authRequest = QString("SEARCH:%1\n").arg(user_name, option);
+    m_tcpSocket->sendMessage(authRequest);
+
+}

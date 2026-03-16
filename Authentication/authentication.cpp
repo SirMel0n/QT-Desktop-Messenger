@@ -188,7 +188,7 @@ void Authentication::onReadyRead()
             clearInput();
 
             // Emit success signal with username and password
-            emit loginSuccessful(username, m_pendingPassword);
+            emit loginSuccessful(m_pendingLogin, m_pendingPassword);
 
             accept();
         }
