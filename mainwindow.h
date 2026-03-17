@@ -1,10 +1,12 @@
-    #ifndef MAINWINDOW_H
+#ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
 #include <QMainWindow>
 #include "TcpSocket.h"
-#include "Authentication/authentication.h"
 #include <QShortcut>
+#include <QStringList>
+
+class QListWidgetItem;
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -17,7 +19,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(const QString &login, const QString &password, QWidget *parent = nullptr);
     ~MainWindow();
 
 private slots:
@@ -26,15 +28,22 @@ private slots:
     void onMessageReceived(const QString &message);
     void onSocketError(const QString &errorMsg);
     void on_btnSend_clicked();
-    void onLoginSuccessful(const QString &username);
-
     void on_btnSearch_clicked();
+    void on_lstUsers_itemClicked(QListWidgetItem *item);
 
 private:
+    void closeSearchPanel();
+
     Ui::MainWindow *ui;
     TcpSocket *m_tcpSocket;
-    Authentication *m_auth;
     QShortcut *shortcut;
+
+    QString m_login;
+    QString m_password;
+    QString m_displayName;
+    QString m_activePeer;
+    bool m_isAuthenticated;
+    bool m_searchOpen;
 };
 
 #endif // MAINWINDOW_H

@@ -1,4 +1,4 @@
-﻿    #include "registration.h"
+﻿#include "registration.h"
 #include "./Registration/ui_registration.h"
 #include <QLabel>
 #include <QPushButton>
@@ -194,7 +194,7 @@ void Registration::onReadyRead()
             clearInput();
 
             // Emit success signal with username and password
-            emit loginSuccessful(username, m_pendingPassword);
+            emit loginSuccessful(m_pendingLogin, m_pendingPassword);
 
             accept();
         }
