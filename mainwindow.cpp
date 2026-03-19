@@ -71,17 +71,39 @@ void MainWindow::onResponseReceived(const QString &message)
 
     if (message.startsWith("SEARCH_RESULT:")) {
         const QString payload = message.mid(QString("SEARCH_RESULT:").size());
-        const QStringList users = payload.split(',', Qt::SkipEmptyParts);
+        const QStringList entries = payload.split(';', Qt::SkipEmptyParts);
 
         ui->lstUsers->clear();
-        for (const QString &user : users) {
-            ui->lstUsers->addItem(user.trimmed());
+
+        for (const QString &entry : entries) {
+            const QStringList parts = entry.split('|');
+            const QString username = parts.value(0).trimmed();
+            const QString status = parts.value(1).trimmed();
+
+            if (username.isEmpty()) {
+                continue;
+            }
+
+            QString label = username;
+            if (status == "active_session") {
+                label += " (online • chat)";
+            } else if (status == "active") {
+                label += " (online)";
+            } else if (status == "session") {
+                label += " (chat)";
+            }
+
+            QListWidgetItem *item = new QListWidgetItem(label);
+            item->setData(Qt::UserRole, username); // keep raw username
+            ui->lstUsers->addItem(item);
         }
 
-        if (users.isEmpty()) {
-            ui->lstUsers->clear();
-            ui->lstUsers->addItem("No authenticated users found.");
+        if (ui->lstUsers->count() == 0) {
+            ui->lstChat->addItem("No matching users/sessions found.");
+        } else {
+            ui->lstChat->addItem(QString("Found %1 result(s).").arg(ui->lstUsers->count()));
         }
+        return;
     }
 
     if (message.startsWith("SESSION_CREATED:")) {
@@ -215,7 +237,11 @@ void MainWindow::on_lstUsers_itemClicked(QListWidgetItem *item)
         return;
     }
 
-    const QString selectedUser = item->text().trimmed();
+    QString selectedUser = item->data(Qt::UserRole).toString().trimmed();
+    if (selectedUser.isEmpty()) {
+        selectedUser = item->text().section(" (", 0, 0).trimmed();
+    }
+
     if (selectedUser.isEmpty()) {
         return;
     }
