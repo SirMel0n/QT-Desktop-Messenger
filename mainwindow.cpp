@@ -18,7 +18,7 @@ MainWindow::MainWindow(const QString &login, const QString &password, QWidget *p
 
     connect(m_tcpSocket, &TcpSocket::connected, this, &MainWindow::onConnected);
     connect(m_tcpSocket, &TcpSocket::disconnected, this, &MainWindow::onDisconnected);
-    connect(m_tcpSocket, &TcpSocket::messageReceived, this, &MainWindow::onMessageReceived);
+    connect(m_tcpSocket, &TcpSocket::messageReceived, this, &MainWindow::onResponseReceived);
     connect(m_tcpSocket, &TcpSocket::errorOccurred, this, &MainWindow::onSocketError);
 
     connect(shortcut, &QShortcut::activated, this, &MainWindow::on_btnSend_clicked);
@@ -48,7 +48,7 @@ void MainWindow::onDisconnected()
     ui->lstChat->addItem("Disconnected from server");
 }
 
-void MainWindow::onMessageReceived(const QString &message)
+void MainWindow::onResponseReceived(const QString &message)
 {
     if (message.startsWith("AUTH_SUCCESS:")) {
         m_isAuthenticated = true;
@@ -65,7 +65,7 @@ void MainWindow::onMessageReceived(const QString &message)
 
     if (message.startsWith("SEARCH_EMPTY")) {
         ui->lstUsers->clear();
-        ui->lstChat->addItem("No authenticated users found.");
+        ui->lstUsers->addItem("No authenticated users found.");
         return;
     }
 
@@ -79,11 +79,9 @@ void MainWindow::onMessageReceived(const QString &message)
         }
 
         if (users.isEmpty()) {
-            ui->lstChat->addItem("No authenticated users found.");
-        } else {
-            ui->lstChat->addItem(QString("Found %1 user(s). Click a name to create a session.").arg(users.size()));
+            ui->lstUsers->clear();
+            ui->lstUsers->addItem("No authenticated users found.");
         }
-        return;
     }
 
     if (message.startsWith("SESSION_CREATED:")) {
@@ -98,7 +96,48 @@ void MainWindow::onMessageReceived(const QString &message)
         return;
     }
 
-    ui->lstChat->addItem(message);
+    if (message.startsWith("MSG:")) {
+        QStringList parts = message.split(":");
+
+            QString user = parts[1];
+            QString body = parts[2];
+
+            if(user.isEmpty() || body.isEmpty() ) {
+                qDebug() << "Invalid MSG format";
+                return;
+            }
+
+            // display message in the chat window
+            QString safeName = user;
+            QString safeMsg  = body;
+
+            // Create list item
+            QListWidgetItem* item = new QListWidgetItem(ui->lstChat);
+
+            //  Create row widget
+            QWidget* rowWidget = new QWidget;
+            QVBoxLayout* layout = new QVBoxLayout(rowWidget);
+            layout->setContentsMargins(8, 4, 8, 4);
+            layout->setSpacing(2);
+
+            // Name label (top, colored)
+            QLabel* nameLabel = new QLabel(QString("(%1)").arg(safeName));
+            nameLabel->setStyleSheet("color: #FF0000; font-weight: 600;");
+
+            // Message label (bottom)
+            QLabel* msgLabel = new QLabel(safeMsg);
+            msgLabel->setWordWrap(true);
+            msgLabel->setStyleSheet("color: #EAEAEA;"); // optional
+
+            layout->addWidget(nameLabel);
+            layout->addWidget(msgLabel);
+
+            // Let QListWidget size row correctly
+            item->setSizeHint(rowWidget->sizeHint());
+            ui->lstChat->setItemWidget(item, rowWidget);
+            qDebug() << "Message received from" + user;
+    }
+
 }
 
 void MainWindow::onSocketError(const QString &errorMsg)
@@ -122,6 +161,36 @@ void MainWindow::on_btnSend_clicked()
         QMessageBox::information(this, "No session", "Search and click a user first.");
         return;
     }
+
+
+    // display message in the chat window
+    QString safeName = m_displayName;
+    QString safeMsg  = msg;
+
+    // Create list item
+    QListWidgetItem* item = new QListWidgetItem(ui->lstChat);
+
+    //  Create row widget
+    QWidget* rowWidget = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(rowWidget);
+    layout->setContentsMargins(8, 4, 8, 4);
+    layout->setSpacing(2);
+
+    // Name label (top, colored)
+    QLabel* nameLabel = new QLabel(QString("(%1)").arg(safeName));
+    nameLabel->setStyleSheet("color: #4A90E2; font-weight: 600;");
+
+    // Message label (bottom)
+    QLabel* msgLabel = new QLabel(safeMsg);
+    msgLabel->setWordWrap(true);
+    msgLabel->setStyleSheet("color: #EAEAEA;"); // optional
+
+    layout->addWidget(nameLabel);
+    layout->addWidget(msgLabel);
+
+    // Let QListWidget size row correctly
+    item->setSizeHint(rowWidget->sizeHint());
+    ui->lstChat->setItemWidget(item, rowWidget);
 
     const QString packet = QString("MSG:%1:%2\n").arg(m_activePeer, msg);
     m_tcpSocket->sendMessage(packet);

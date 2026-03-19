@@ -25,7 +25,7 @@ public:
 private slots:
     void onConnected();
     void onDisconnected();
-    void onMessageReceived(const QString &message);
+    void onResponseReceived(const QString &message);
     void onSocketError(const QString &errorMsg);
     void on_btnSend_clicked();
     void on_btnSearch_clicked();
