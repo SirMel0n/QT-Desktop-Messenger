@@ -33,6 +33,9 @@ private slots:
 
 private:
     void closeSearchPanel();
+    void showStatus(const QString &text);
+    void appendChatBubble(const QString &user, const QString &body, bool outgoing);
+    void setupSplitLayout();
 
     Ui::MainWindow *ui;
     TcpSocket *m_tcpSocket;
@@ -42,6 +45,7 @@ private:
     QString m_password;
     QString m_displayName;
     QString m_activePeer;
+    QString m_lastSearchQuery;
     bool m_isAuthenticated;
     bool m_searchOpen;
 };
