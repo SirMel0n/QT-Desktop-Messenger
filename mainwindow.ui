@@ -17,30 +17,30 @@
    <widget class="QGroupBox" name="groupBox">
     <property name="geometry">
      <rect>
-      <x>40</x>
-      <y>110</y>
-      <width>351</width>
-      <height>331</height>
+      <x>340</x>
+      <y>20</y>
+      <width>331</width>
+      <height>401</height>
      </rect>
     </property>
     <property name="title">
      <string>Chat Window</string>
     </property>
     <layout class="QFormLayout" name="formLayout">
-     <item row="0" column="0" colspan="2">
-      <widget class="QListWidget" name="lstChat"/>
-     </item>
-     <item row="1" column="0">
+     <item row="2" column="0">
       <widget class="QLabel" name="label">
        <property name="text">
         <string>Message:</string>
        </property>
       </widget>
      </item>
-     <item row="1" column="1">
+     <item row="2" column="1">
       <widget class="QLineEdit" name="lnMessage"/>
      </item>
-     <item row="2" column="1">
+     <item row="1" column="0" colspan="2">
+      <widget class="QListWidget" name="lstChat"/>
+     </item>
+     <item row="3" column="1">
       <widget class="QPushButton" name="btnSend">
        <property name="minimumSize">
         <size>
@@ -53,14 +53,21 @@
        </property>
       </widget>
      </item>
+     <item row="0" column="0" colspan="2">
+      <widget class="QLabel" name="lblActiveSession">
+       <property name="text">
+        <string>Active session:</string>
+       </property>
+      </widget>
+     </item>
     </layout>
    </widget>
    <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
-      <x>40</x>
+      <x>10</x>
       <y>20</y>
-      <width>311</width>
+      <width>301</width>
       <height>24</height>
      </rect>
     </property>
@@ -84,27 +91,15 @@
      </item>
     </layout>
    </widget>
-   <widget class="QWidget" name="">
+   <widget class="QListWidget" name="lstUsers">
     <property name="geometry">
      <rect>
-      <x>30</x>
+      <x>20</x>
       <y>50</y>
-      <width>318</width>
-      <height>41</height>
+      <width>254</width>
+      <height>331</height>
      </rect>
     </property>
-    <layout class="QHBoxLayout" name="horizontalLayout_2">
-     <item>
-      <widget class="QLabel" name="lblActiveSession">
-       <property name="text">
-        <string>Active session:</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QListWidget" name="lstUsers"/>
-     </item>
-    </layout>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">

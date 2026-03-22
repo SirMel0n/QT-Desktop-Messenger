@@ -50,10 +50,13 @@ void MainWindow::onDisconnected()
 
 void MainWindow::onResponseReceived(const QString &message)
 {
+    qDebug() << "MainWindow received:" << message;
+
     if (message.startsWith("AUTH_SUCCESS:")) {
         m_isAuthenticated = true;
         m_displayName = message.mid(QString("AUTH_SUCCESS:").size());
         ui->lstChat->addItem("Authenticated as: " + m_displayName);
+        m_tcpSocket->sendMessage("PULL_PENDING\n");
         return;
     }
 
@@ -63,9 +66,17 @@ void MainWindow::onResponseReceived(const QString &message)
         return;
     }
 
+    if (message.startsWith("ERROR:")) {
+        ui->lstChat->addItem(message);
+        qWarning() << "Server error response:" << message;
+        return;
+    }
+
     if (message.startsWith("SEARCH_EMPTY")) {
         ui->lstUsers->clear();
-        ui->lstUsers->addItem("No authenticated users found.");
+        QListWidgetItem *item = new QListWidgetItem("No matching users found");
+        item->setFlags(item->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
+        ui->lstUsers->addItem(item);
         return;
     }
 
@@ -86,7 +97,7 @@ void MainWindow::onResponseReceived(const QString &message)
 
             QString label = username;
             if (status == "active_session") {
-                label += " (online • chat)";
+                label += " (online chat)";
             } else if (status == "active") {
                 label += " (online)";
             } else if (status == "session") {
@@ -94,15 +105,11 @@ void MainWindow::onResponseReceived(const QString &message)
             }
 
             QListWidgetItem *item = new QListWidgetItem(label);
-            item->setData(Qt::UserRole, username); // keep raw username
+            item->setData(Qt::UserRole, username);
             ui->lstUsers->addItem(item);
         }
 
-        if (ui->lstUsers->count() == 0) {
-            ui->lstChat->addItem("No matching users/sessions found.");
-        } else {
-            ui->lstChat->addItem(QString("Found %1 result(s).").arg(ui->lstUsers->count()));
-        }
+        ui->lstChat->addItem(QString("Found %1 result(s).").arg(ui->lstUsers->count()));
         return;
     }
 
@@ -119,47 +126,52 @@ void MainWindow::onResponseReceived(const QString &message)
     }
 
     if (message.startsWith("MSG:")) {
-        QStringList parts = message.split(":");
+        const int firstColon = message.indexOf(':');
+        const int secondColon = message.indexOf(':', firstColon + 1);
 
-            QString user = parts[1];
-            QString body = parts[2];
+        if (firstColon == -1 || secondColon == -1) {
+            qDebug() << "Invalid MSG format:" << message;
+            return;
+        }
 
-            if(user.isEmpty() || body.isEmpty() ) {
-                qDebug() << "Invalid MSG format";
-                return;
-            }
+        const QString user = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
+        const QString body = message.mid(secondColon + 1).trimmed();
 
-            // display message in the chat window
-            QString safeName = user;
-            QString safeMsg  = body;
+        if (user.isEmpty() || body.isEmpty()) {
+            qDebug() << "Invalid MSG content";
+            return;
+        }
 
-            // Create list item
-            QListWidgetItem* item = new QListWidgetItem(ui->lstChat);
+        QListWidgetItem* item = new QListWidgetItem(ui->lstChat);
+        QWidget* rowWidget = new QWidget;
+        QVBoxLayout* layout = new QVBoxLayout(rowWidget);
+        layout->setContentsMargins(8, 4, 8, 4);
+        layout->setSpacing(2);
 
-            //  Create row widget
-            QWidget* rowWidget = new QWidget;
-            QVBoxLayout* layout = new QVBoxLayout(rowWidget);
-            layout->setContentsMargins(8, 4, 8, 4);
-            layout->setSpacing(2);
+        QLabel* nameLabel = new QLabel(QString("(%1)").arg(user));
+        nameLabel->setStyleSheet("color: #FF0000; font-weight: 600;");
 
-            // Name label (top, colored)
-            QLabel* nameLabel = new QLabel(QString("(%1)").arg(safeName));
-            nameLabel->setStyleSheet("color: #FF0000; font-weight: 600;");
+        QLabel* msgLabel = new QLabel(body);
+        msgLabel->setWordWrap(true);
+        msgLabel->setStyleSheet("color: #EAEAEA;");
 
-            // Message label (bottom)
-            QLabel* msgLabel = new QLabel(safeMsg);
-            msgLabel->setWordWrap(true);
-            msgLabel->setStyleSheet("color: #EAEAEA;"); // optional
+        layout->addWidget(nameLabel);
+        layout->addWidget(msgLabel);
 
-            layout->addWidget(nameLabel);
-            layout->addWidget(msgLabel);
-
-            // Let QListWidget size row correctly
-            item->setSizeHint(rowWidget->sizeHint());
-            ui->lstChat->setItemWidget(item, rowWidget);
-            qDebug() << "Message received from" + user;
+        item->setSizeHint(rowWidget->sizeHint());
+        ui->lstChat->setItemWidget(item, rowWidget);
+        qDebug() << "Message received from" << user;
     }
 
+    if (message.startsWith("PRESENCE:")) {
+        // PRESENCE:<username>:online|offline
+        if (m_isAuthenticated) {
+            const QString query = ui->lnSearch->text().trimmed();
+            const QString packet = QString("SEARCH:%1\n").arg(query);
+            m_tcpSocket->sendMessage(packet);
+        }
+        return;
+    }
 }
 
 void MainWindow::onSocketError(const QString &errorMsg)
@@ -226,6 +238,8 @@ void MainWindow::on_btnSearch_clicked()
         return;
     }
 
+    ui->lstUsers->clear(); // clear stale results before new search
+
     const QString query = ui->lnSearch->text().trimmed();
     const QString packet = QString("SEARCH:%1\n").arg(query);
     m_tcpSocket->sendMessage(packet);
@@ -237,11 +251,8 @@ void MainWindow::on_lstUsers_itemClicked(QListWidgetItem *item)
         return;
     }
 
-    QString selectedUser = item->data(Qt::UserRole).toString().trimmed();
-    if (selectedUser.isEmpty()) {
-        selectedUser = item->text().section(" (", 0, 0).trimmed();
-    }
-
+    // only allow real user rows
+    const QString selectedUser = item->data(Qt::UserRole).toString().trimmed();
     if (selectedUser.isEmpty()) {
         return;
     }

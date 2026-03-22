@@ -14,41 +14,46 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    Authentication auth;
-    Registration reg;
-
     QString login;
     QString password;
-
-    QObject::connect(&auth, &Authentication::loginSuccessful,
-                     [&](const QString &l, const QString &p) {
-                         login = l;
-                         password = p;
-                     });
-
-    QObject::connect(&reg, &Registration::loginSuccessful,
-                     [&](const QString &l, const QString &p) {
-                         login = l;
-                         password = p;
-                     });
-
     const QString lanIp = ConfigManager::instance().IpServer();
     const int port = ConfigManager::instance().serverPort();
 
-    auth.connectToServer(lanIp, port);
-    reg.connectToServer(lanIp, port);
+    bool accepted = false;
 
-    // execute after successful authentication
-    if (auth.exec() == QDialog::Accepted) {
-        MainWindow w(login, password);
-        w.show();
-        return a.exec();
-    } else if (reg.exec() == QDialog::Accepted) {
-        MainWindow w(login, password);
-        w.show();
-        return a.exec();
+    {
+        Authentication auth;
+        QObject::connect(&auth, &Authentication::loginSuccessful,
+                         [&](const QString &l, const QString &p) {
+                             login = l;
+                             password = p;
+                         });
+        auth.connectToServer(lanIp, port);
+
+        if (auth.exec() == QDialog::Accepted) {
+            accepted = true;
+        }
     }
 
-    // If authentication failed or was cancelled, exit
-    return 0;
+    if (!accepted) {
+        Registration reg;
+        QObject::connect(&reg, &Registration::loginSuccessful,
+                         [&](const QString &l, const QString &p) {
+                             login = l;
+                             password = p;
+                         });
+        reg.connectToServer(lanIp, port);
+
+        if (reg.exec() == QDialog::Accepted) {
+            accepted = true;
+        }
+    }
+
+    if (!accepted) {
+        return 0;
+    }
+
+    MainWindow w(login, password);
+    w.show();
+    return a.exec();
 }

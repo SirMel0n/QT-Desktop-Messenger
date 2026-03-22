@@ -182,7 +182,7 @@ void Registration::onReadyRead()
 
         // Parse server response
         if (response.startsWith("REG_SUCCESS:")) {
-            QString username = response.mid(12); // Extract username after "AUTH_SUCCESS:"
+            QString username = response.mid(12);
 
             QMessageBox::information(this, "Success",
                                      "Login successful!\n"
@@ -190,11 +190,13 @@ void Registration::onReadyRead()
 
             qDebug() << "User registered:" << m_pendingLogin << "Username:" << username;
 
-            // Clear the input fields after successful login
             clearInput();
 
-            // Emit success signal with username and password
             emit loginSuccessful(m_pendingLogin, m_pendingPassword);
+
+            if (m_socket->state() != QAbstractSocket::UnconnectedState) {
+                m_socket->disconnectFromHost();
+            }
 
             accept();
         }
@@ -218,9 +220,6 @@ void Registration::onSocketError(QAbstractSocket::SocketError socketError)
     Q_UNUSED(socketError);
     QString errorMsg = m_socket->errorString();
     qCritical() << "Socket error:" << errorMsg;
-
-    QMessageBox::critical(this, "Connection Error",
-                          "Failed to connect to server:\n" + errorMsg);
 
     emit serverConnectionFailed(errorMsg);
 }

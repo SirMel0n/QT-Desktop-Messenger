@@ -190,6 +190,10 @@ void Authentication::onReadyRead()
             // Emit success signal with username and password
             emit loginSuccessful(m_pendingLogin, m_pendingPassword);
 
+            if (m_socket->state() != QAbstractSocket::UnconnectedState) {
+                m_socket->disconnectFromHost();
+            }
+
             accept();
         }
         else if (response.startsWith("AUTH_FAILED:")) {
@@ -211,9 +215,6 @@ void Authentication::onSocketError(QAbstractSocket::SocketError socketError)
     Q_UNUSED(socketError);
     QString errorMsg = m_socket->errorString();
     qCritical() << "Socket error:" << errorMsg;
-
-    QMessageBox::critical(this, "Connection Error",
-                          "Failed to connect to server:\n" + errorMsg);
 
     emit serverConnectionFailed(errorMsg);
 }
