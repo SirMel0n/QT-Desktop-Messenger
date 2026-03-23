@@ -8,6 +8,7 @@
 
 class QListWidgetItem;
 class QMenu;
+class QPoint;
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -36,10 +37,12 @@ private slots:
     void onMenuSettingsTriggered();
     void onMenuCreateGroupTriggered();
 
+    void on_lstChat_customContextMenuRequested(const QPoint &pos);
+
 private:
     void closeSearchPanel();
     void showStatus(const QString &text);
-    void appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs);
+    void appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs, const QString &messageId = QString(), bool isEdited = false);
     void setupSplitLayout();
 
     Ui::MainWindow *ui;

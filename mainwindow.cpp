@@ -9,6 +9,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QAction>
+#include <QInputDialog>
 #include "ConfigManager.h"
 #include <QDateTime>
 
@@ -32,6 +33,10 @@ MainWindow::MainWindow(const QString &login, const QString &password, QWidget *p
     connect(m_tcpSocket, &TcpSocket::errorOccurred, this, &MainWindow::onSocketError);
 
     connect(shortcut, &QShortcut::activated, this, &MainWindow::on_btnSend_clicked);
+
+    ui->lstChat->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(ui->lstChat, &QListWidget::customContextMenuRequested,
+            this, &MainWindow::on_lstChat_customContextMenuRequested);
 
     QAction *settingsAction = m_mainMenu->addAction("Settings");
     QAction *createGroupAction = m_mainMenu->addAction("Create Group Chat");
@@ -113,19 +118,26 @@ void MainWindow::closeSearchPanel()
     m_tcpSocket->sendMessage("SEARCH:\n");
 }
 
-void MainWindow::appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs)
+void MainWindow::appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs, const QString &messageId, bool isEdited)
 {
     if (user.isEmpty() || body.isEmpty()) {
         return;
     }
 
     QListWidgetItem *item = new QListWidgetItem(ui->lstChat);
+
+    item->setData(Qt::UserRole, messageId);           // DB message id
+    item->setData(Qt::UserRole + 1, body);            // body
+    item->setData(Qt::UserRole + 2, user);            // sender
+    item->setData(Qt::UserRole + 3, timestampMs);     // timestamp
+    item->setData(Qt::UserRole + 4, outgoing);        // owner flag
+    item->setData(Qt::UserRole + 5, isEdited);        // edited flag
+
     QWidget *rowWidget = new QWidget;
     QVBoxLayout *layout = new QVBoxLayout(rowWidget);
     layout->setContentsMargins(8, 4, 8, 4);
     layout->setSpacing(2);
 
-    // Header row: username + timestamp on the same line
     QWidget *headerWidget = new QWidget(rowWidget);
     QHBoxLayout *headerLayout = new QHBoxLayout(headerWidget);
     headerLayout->setContentsMargins(0, 0, 0, 0);
@@ -146,11 +158,19 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
         }
     }
 
+    QLabel *editedLabel = new QLabel(headerWidget);
+    editedLabel->setObjectName("msgEditedLabel");
+    editedLabel->setStyleSheet("color: #A9A9A9; font-size: 11px; font-style: italic;");
+    editedLabel->setText("edited");
+    editedLabel->setVisible(isEdited);
+
     headerLayout->addWidget(nameLabel);
     headerLayout->addWidget(timeLabel);
+    headerLayout->addWidget(editedLabel);
     headerLayout->addStretch();
 
     QLabel *msgLabel = new QLabel(body, rowWidget);
+    msgLabel->setObjectName("msgBodyLabel");
     msgLabel->setWordWrap(true);
     msgLabel->setStyleSheet("color: #EAEAEA;");
 
@@ -290,26 +310,13 @@ void MainWindow::onResponseReceived(const QString &message)
         return;
     }
 
-    /*  if (message.startsWith("MSG:")) {
-          const int firstColon = message.indexOf(':' );
-          const int secondColon = message.indexOf(':' , firstColon + 1);
-
-          if (firstColon == -1 || secondColon == -1) {
-              qDebug() << "Invalid MSG format:" << message;
-              return;
-          }
-
-          const QString user = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
-          const QString body = message.mid(secondColon + 1).trimmed();
-          appendChatBubble(user, body, false, -1);
-          return;
-      } */
-
     if (message.startsWith("MSG:")) {
-        // MSG_TS:<sender>:<epochMs>:<body>
+        // New format: MSG:<sender>:<timestampMs>:<messageId>:<body>
+        // Backward-compatible fallback: MSG:<sender>:<timestampMs>:<body>
         const int firstColon = message.indexOf(':');
         const int secondColon = message.indexOf(':', firstColon + 1);
         const int thirdColon = message.indexOf(':', secondColon + 1);
+        const int fourthColon = message.indexOf(':', thirdColon + 1);
 
         if (firstColon == -1 || secondColon == -1 || thirdColon == -1) {
             qDebug() << "Invalid MSG format:" << message;
@@ -318,7 +325,19 @@ void MainWindow::onResponseReceived(const QString &message)
 
         const QString user = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
         const QString tsStr = message.mid(secondColon + 1, thirdColon - secondColon - 1).trimmed();
-        const QString body = message.mid(thirdColon + 1).trimmed();
+
+
+        QString messageId;
+        QString body;
+
+        if (fourthColon == -1) {
+            // old: MSG:<sender>:<timestampMs>:<body>
+            body = message.mid(thirdColon + 1).trimmed();
+        } else {
+            // new: MSG:<sender>:<timestampMs>:<messageId>:<body>
+            messageId = message.mid(thirdColon + 1, fourthColon - thirdColon - 1).trimmed();
+            body = message.mid(fourthColon + 1).trimmed();
+        }
 
         bool ok = false;
         const qint64 tsMs = tsStr.toLongLong(&ok);
@@ -328,7 +347,8 @@ void MainWindow::onResponseReceived(const QString &message)
             return;
         }
 
-        appendChatBubble(user, body, false, ok ? tsMs : -1);
+        const bool outgoing = (user == m_displayName);
+        appendChatBubble(user, body, outgoing, ok ? tsMs : -1, messageId, false);
         return;
     }
 
@@ -337,6 +357,89 @@ void MainWindow::onResponseReceived(const QString &message)
             const QString packet = QString("SEARCH:%1\n").arg(m_searchOpen ? m_lastSearchQuery : QString());
             m_tcpSocket->sendMessage(packet);
         }
+        return;
+    }
+
+    if (message.startsWith("MSG_EDIT:")) {
+        // MSG_EDIT:<messageId>:<newBody>
+        const int firstColon = message.indexOf(':');
+        const int secondColon = message.indexOf(':', firstColon + 1);
+
+        if (firstColon == -1 || secondColon == -1) {
+            qDebug() << "Invalid MSG_EDIT format:" << message;
+            return;
+        }
+
+        const QString messageId = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
+        const QString newBody = message.mid(secondColon + 1).trimmed();
+
+        if (messageId.isEmpty() || newBody.isEmpty()) {
+            qDebug() << "Invalid MSG_EDIT content:" << message;
+            return;
+        }
+
+        for (int i = 0; i < ui->lstChat->count(); ++i) {
+            QListWidgetItem *it = ui->lstChat->item(i);
+            if (!it) {
+                continue;
+            }
+
+            if (it->data(Qt::UserRole).toString() != messageId) {
+                continue;
+            }
+
+            it->setData(Qt::UserRole + 1, newBody);
+            it->setData(Qt::UserRole + 5, true);
+
+            QWidget *rowWidget = ui->lstChat->itemWidget(it);
+            if (rowWidget) {
+                QLabel *msgLabel = rowWidget->findChild<QLabel *>("msgBodyLabel");
+                if (msgLabel) {
+                    msgLabel->setText(newBody);
+                }
+
+                QLabel *editedLabel = rowWidget->findChild<QLabel *>("msgEditedLabel");
+                if (editedLabel) {
+                    editedLabel->setVisible(true);
+                }
+
+                it->setSizeHint(rowWidget->sizeHint());
+            }
+
+            break;
+        }
+
+        showStatus("Message edited");
+        return;
+    }
+
+    if (message.startsWith("MSG_DELETE:")) {
+        // MSG_DELETE:<messageId>
+        const int firstColon = message.indexOf(':');
+        if (firstColon == -1) {
+            qDebug() << "Invalid MSG_DELETE format:" << message;
+            return;
+        }
+
+        const QString messageId = message.mid(firstColon + 1).trimmed();
+        if (messageId.isEmpty()) {
+            qDebug() << "Invalid MSG_DELETE content:" << message;
+            return;
+        }
+
+        for (int i = 0; i < ui->lstChat->count(); ++i) {
+            QListWidgetItem *it = ui->lstChat->item(i);
+            if (!it) {
+                continue;
+            }
+
+            if (it->data(Qt::UserRole).toString() == messageId) {
+                delete ui->lstChat->takeItem(i);
+                break;
+            }
+        }
+
+        showStatus("Message deleted");
         return;
     }
 }
@@ -363,7 +466,7 @@ void MainWindow::on_btnSend_clicked()
         return;
     }
 
-    appendChatBubble(m_displayName, msg, true, QDateTime::currentMSecsSinceEpoch());
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
 
     const QString packet = QString("MSG:%1:%2\n").arg(m_activePeer, msg);
     m_tcpSocket->sendMessage(packet);
@@ -428,4 +531,71 @@ void MainWindow::onMenuSettingsTriggered()
 void MainWindow::onMenuCreateGroupTriggered()
 {
     QMessageBox::information(this, "Create Group Chat", "Group chat creation is not implemented yet.");
+}
+
+void MainWindow::on_lstChat_customContextMenuRequested(const QPoint &pos)
+{
+    QListWidgetItem *item = ui->lstChat->itemAt(pos);
+    if (!item) {
+        return;
+    }
+
+    const bool outgoing = item->data(Qt::UserRole + 4).toBool();
+    if (!outgoing) {
+        return; // only own messages editable/deletable
+    }
+
+    QMenu menu(this);
+    QAction *editAction = menu.addAction("Edit");
+    QAction *deleteAction = menu.addAction("Delete");
+
+    QAction *selected = menu.exec(ui->lstChat->viewport()->mapToGlobal(pos));
+    if (!selected) {
+        return;
+    }
+
+    if (selected == editAction) {
+        const QString oldBody = item->data(Qt::UserRole + 1).toString();
+
+        bool ok = false;
+        const QString newBody = QInputDialog::getText(
+            this,
+            "Edit message",
+            "Message:",
+            QLineEdit::Normal,
+            oldBody,
+            &ok).trimmed();
+
+        if (!ok || newBody.isEmpty() || newBody == oldBody) {
+            return;
+        }
+
+        item->setData(Qt::UserRole + 1, newBody);
+
+        QWidget *rowWidget = ui->lstChat->itemWidget(item);
+        if (rowWidget) {
+            QLabel *msgLabel = rowWidget->findChild<QLabel*>("msgBodyLabel");
+            if (msgLabel) {
+                msgLabel->setText(newBody);
+                item->setSizeHint(rowWidget->sizeHint());
+            }
+        }
+
+        // Optional when backend edit API is ready:
+        const QString id = item->data(Qt::UserRole).toString();
+        if (!id.isEmpty()) {
+             m_tcpSocket->sendMessage(QString("MSG_EDIT:%1:%2\n").arg(id, newBody));
+         }
+
+        showStatus("Message edited");
+    } else if (selected == deleteAction) {
+        // Optional when backend delete API is ready:
+        const QString id = item->data(Qt::UserRole).toString();
+        if (!id.isEmpty()) {
+            m_tcpSocket->sendMessage(QString("MSG_DELETE:%1\n").arg(id));
+        }
+
+        delete ui->lstChat->takeItem(ui->lstChat->row(item));
+        showStatus("Message deleted");
+    }
 }
