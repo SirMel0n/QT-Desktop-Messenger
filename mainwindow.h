@@ -7,6 +7,7 @@
 #include <QStringList>
 
 class QListWidgetItem;
+class QMenu;
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -31,15 +32,20 @@ private slots:
     void on_btnSearch_clicked();
     void on_lstUsers_itemClicked(QListWidgetItem *item);
 
+    void on_btnMenu_clicked();
+    void onMenuSettingsTriggered();
+    void onMenuCreateGroupTriggered();
+
 private:
     void closeSearchPanel();
     void showStatus(const QString &text);
-    void appendChatBubble(const QString &user, const QString &body, bool outgoing);
+    void appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs);
     void setupSplitLayout();
 
     Ui::MainWindow *ui;
     TcpSocket *m_tcpSocket;
     QShortcut *shortcut;
+    QMenu *m_mainMenu;
 
     QString m_login;
     QString m_password;

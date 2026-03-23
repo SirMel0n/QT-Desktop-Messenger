@@ -7,13 +7,17 @@
 #include <QHBoxLayout>
 #include <QSplitter>
 #include <QLabel>
+#include <QMenu>
+#include <QAction>
 #include "ConfigManager.h"
+#include <QDateTime>
 
 MainWindow::MainWindow(const QString &login, const QString &password, QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , m_tcpSocket(new TcpSocket(this))
     , shortcut(new QShortcut(QKeySequence(Qt::Key_Return), this))
+    , m_mainMenu(new QMenu(this))
     , m_login(login)
     , m_password(password)
     , m_isAuthenticated(false)
@@ -28,6 +32,15 @@ MainWindow::MainWindow(const QString &login, const QString &password, QWidget *p
     connect(m_tcpSocket, &TcpSocket::errorOccurred, this, &MainWindow::onSocketError);
 
     connect(shortcut, &QShortcut::activated, this, &MainWindow::on_btnSend_clicked);
+
+    QAction *settingsAction = m_mainMenu->addAction("Settings");
+    QAction *createGroupAction = m_mainMenu->addAction("Create Group Chat");
+
+    connect(settingsAction, &QAction::triggered, this, &MainWindow::onMenuSettingsTriggered);
+    connect(createGroupAction, &QAction::triggered, this, &MainWindow::onMenuCreateGroupTriggered);
+
+    ui->btnMenu->setText("Menu");
+    ui->btnMenu->setFixedWidth(72);
 
     ui->lblActiveSession->setText("Active session: none");
     showStatus("Connecting...");
@@ -51,19 +64,26 @@ void MainWindow::setupSplitLayout()
     auto *leftLayout = new QVBoxLayout(leftPane);
     leftLayout->setContentsMargins(8, 8, 8, 8);
     leftLayout->setSpacing(8);
-    leftLayout->addWidget(ui->layoutWidget); // search row
-    leftLayout->addWidget(ui->lstUsers);     // search/chat list
+
+    auto *topRow = new QHBoxLayout();
+    topRow->setContentsMargins(0, 0, 0, 0);
+    topRow->setSpacing(8);
+    topRow->addWidget(ui->btnMenu, 0);
+    topRow->addWidget(ui->layoutWidget, 1);
+
+    leftLayout->addLayout(topRow);
+    leftLayout->addWidget(ui->lstUsers, 1);
 
     auto *rightPane = new QWidget(splitter);
     auto *rightLayout = new QVBoxLayout(rightPane);
     rightLayout->setContentsMargins(8, 8, 8, 8);
     rightLayout->setSpacing(8);
-    rightLayout->addWidget(ui->groupBox);    // chat window area
+    rightLayout->addWidget(ui->groupBox);
 
     splitter->setChildrenCollapsible(false);
     splitter->setStretchFactor(0, 1);
     splitter->setStretchFactor(1, 2);
-    splitter->setSizes({280, 520});
+    splitter->setSizes({320, 520});
 
     rootLayout->addWidget(splitter);
 }
@@ -93,7 +113,7 @@ void MainWindow::closeSearchPanel()
     m_tcpSocket->sendMessage("SEARCH:\n");
 }
 
-void MainWindow::appendChatBubble(const QString &user, const QString &body, bool outgoing)
+void MainWindow::appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs)
 {
     if (user.isEmpty() || body.isEmpty()) {
         return;
@@ -105,16 +125,36 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     layout->setContentsMargins(8, 4, 8, 4);
     layout->setSpacing(2);
 
-    QLabel *nameLabel = new QLabel(QString("(%1)").arg(user));
-    nameLabel->setStyleSheet(outgoing
-                                 ? "color: #4A90E2; font-weight: 600;"
-                                 : "color: #FF0000; font-weight: 600;");
+    // Header row: username + timestamp on the same line
+    QWidget *headerWidget = new QWidget(rowWidget);
+    QHBoxLayout *headerLayout = new QHBoxLayout(headerWidget);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(6);
 
-    QLabel *msgLabel = new QLabel(body);
+    QLabel *nameLabel = new QLabel(QString("(%1)").arg(user), headerWidget);
+    nameLabel->setStyleSheet(outgoing
+                                 ? "color: #4A90E2; font-weight: 800;"
+                                 : "color: #FF0000; font-weight: 800;");
+
+    QLabel *timeLabel = new QLabel(headerWidget);
+    timeLabel->setStyleSheet("color: #A9A9A9; font-size: 11px; font-weight: 500;");
+
+    if (timestampMs > 0) {
+        const QDateTime localDt = QDateTime::fromMSecsSinceEpoch(timestampMs, Qt::UTC).toLocalTime();
+        if (localDt.isValid()) {
+            timeLabel->setText(localDt.toString("yyyy-MM-dd HH:mm"));
+        }
+    }
+
+    headerLayout->addWidget(nameLabel);
+    headerLayout->addWidget(timeLabel);
+    headerLayout->addStretch();
+
+    QLabel *msgLabel = new QLabel(body, rowWidget);
     msgLabel->setWordWrap(true);
     msgLabel->setStyleSheet("color: #EAEAEA;");
 
-    layout->addWidget(nameLabel);
+    layout->addWidget(headerWidget);
     layout->addWidget(msgLabel);
 
     item->setSizeHint(rowWidget->sizeHint());
@@ -250,18 +290,45 @@ void MainWindow::onResponseReceived(const QString &message)
         return;
     }
 
+    /*  if (message.startsWith("MSG:")) {
+          const int firstColon = message.indexOf(':' );
+          const int secondColon = message.indexOf(':' , firstColon + 1);
+
+          if (firstColon == -1 || secondColon == -1) {
+              qDebug() << "Invalid MSG format:" << message;
+              return;
+          }
+
+          const QString user = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
+          const QString body = message.mid(secondColon + 1).trimmed();
+          appendChatBubble(user, body, false, -1);
+          return;
+      } */
+
     if (message.startsWith("MSG:")) {
+        // MSG_TS:<sender>:<epochMs>:<body>
         const int firstColon = message.indexOf(':');
         const int secondColon = message.indexOf(':', firstColon + 1);
+        const int thirdColon = message.indexOf(':', secondColon + 1);
 
-        if (firstColon == -1 || secondColon == -1) {
+        if (firstColon == -1 || secondColon == -1 || thirdColon == -1) {
             qDebug() << "Invalid MSG format:" << message;
             return;
         }
 
         const QString user = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
-        const QString body = message.mid(secondColon + 1).trimmed();
-        appendChatBubble(user, body, false);
+        const QString tsStr = message.mid(secondColon + 1, thirdColon - secondColon - 1).trimmed();
+        const QString body = message.mid(thirdColon + 1).trimmed();
+
+        bool ok = false;
+        const qint64 tsMs = tsStr.toLongLong(&ok);
+
+        if (user.isEmpty() || body.isEmpty()) {
+            qDebug() << "Invalid MSG content";
+            return;
+        }
+
+        appendChatBubble(user, body, false, ok ? tsMs : -1);
         return;
     }
 
@@ -296,7 +363,7 @@ void MainWindow::on_btnSend_clicked()
         return;
     }
 
-    appendChatBubble(m_displayName, msg, true);
+    appendChatBubble(m_displayName, msg, true, QDateTime::currentMSecsSinceEpoch());
 
     const QString packet = QString("MSG:%1:%2\n").arg(m_activePeer, msg);
     m_tcpSocket->sendMessage(packet);
@@ -341,4 +408,24 @@ void MainWindow::on_lstUsers_itemClicked(QListWidgetItem *item)
     const QString req = QString("SESSION_CREATE:%1\n").arg(selectedUser);
     m_tcpSocket->sendMessage(req);
     closeSearchPanel();
+}
+
+void MainWindow::on_btnMenu_clicked()
+{
+    if (!m_mainMenu || !ui->btnMenu) {
+        return;
+    }
+
+    const QPoint pos = ui->btnMenu->mapToGlobal(QPoint(0, ui->btnMenu->height()));
+    m_mainMenu->exec(pos);
+}
+
+void MainWindow::onMenuSettingsTriggered()
+{
+    QMessageBox::information(this, "Settings", "Settings dialog is not implemented yet.");
+}
+
+void MainWindow::onMenuCreateGroupTriggered()
+{
+    QMessageBox::information(this, "Create Group Chat", "Group chat creation is not implemented yet.");
 }

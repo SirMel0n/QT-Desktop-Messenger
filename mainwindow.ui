@@ -65,9 +65,9 @@
    <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
-      <x>10</x>
-      <y>20</y>
-      <width>301</width>
+      <x>70</x>
+      <y>10</y>
+      <width>271</width>
       <height>24</height>
      </rect>
     </property>
@@ -99,6 +99,19 @@
       <width>254</width>
       <height>331</height>
      </rect>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btnMenu">
+    <property name="geometry">
+     <rect>
+      <x>0</x>
+      <y>10</y>
+      <width>61</width>
+      <height>18</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Menu</string>
     </property>
    </widget>
   </widget>
