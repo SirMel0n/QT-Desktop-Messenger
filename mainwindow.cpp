@@ -364,48 +364,61 @@ void MainWindow::onResponseReceived(const QString &message)
         // MSG_EDIT:<messageId>:<newBody>
         const int firstColon = message.indexOf(':');
         const int secondColon = message.indexOf(':', firstColon + 1);
-
+        // check for empty spaces in the response
         if (firstColon == -1 || secondColon == -1) {
             qDebug() << "Invalid MSG_EDIT format:" << message;
             return;
         }
-
+        // extract variable
         const QString messageId = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
         const QString newBody = message.mid(secondColon + 1).trimmed();
 
+        // checl for empty values
         if (messageId.isEmpty() || newBody.isEmpty()) {
             qDebug() << "Invalid MSG_EDIT content:" << message;
             return;
         }
-
+        // get the QListWidgetItem at index i
         for (int i = 0; i < ui->lstChat->count(); ++i) {
             QListWidgetItem *it = ui->lstChat->item(i);
+
+            // skip null entries
             if (!it) {
                 continue;
             }
 
+            // each chat row stores its message id in Qt::UserRole.
+            // skip rows that do not match the edited message id.
             if (it->data(Qt::UserRole).toString() != messageId) {
                 continue;
             }
 
+            // update cached message body in item metadata
             it->setData(Qt::UserRole + 1, newBody);
+
+            // mark this item as edited
             it->setData(Qt::UserRole + 5, true);
 
+            // get the custom widget used to render this list item
             QWidget *rowWidget = ui->lstChat->itemWidget(it);
             if (rowWidget) {
+                // find the label that displays message text and update it
                 QLabel *msgLabel = rowWidget->findChild<QLabel *>("msgBodyLabel");
                 if (msgLabel) {
                     msgLabel->setText(newBody);
                 }
 
+                // find the "edited" label and show it
                 QLabel *editedLabel = rowWidget->findChild<QLabel *>("msgEditedLabel");
                 if (editedLabel) {
                     editedLabel->setVisible(true);
                 }
 
+                // resiee the text length
                 it->setSizeHint(rowWidget->sizeHint());
             }
 
+            // stop after updating the first matching message
             break;
         }
 
@@ -581,7 +594,6 @@ void MainWindow::on_lstChat_customContextMenuRequested(const QPoint &pos)
             }
         }
 
-        // Optional when backend edit API is ready:
         const QString id = item->data(Qt::UserRole).toString();
         if (!id.isEmpty()) {
              m_tcpSocket->sendMessage(QString("MSG_EDIT:%1:%2\n").arg(id, newBody));
@@ -589,7 +601,6 @@ void MainWindow::on_lstChat_customContextMenuRequested(const QPoint &pos)
 
         showStatus("Message edited");
     } else if (selected == deleteAction) {
-        // Optional when backend delete API is ready:
         const QString id = item->data(Qt::UserRole).toString();
         if (!id.isEmpty()) {
             m_tcpSocket->sendMessage(QString("MSG_DELETE:%1\n").arg(id));
