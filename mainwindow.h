@@ -38,12 +38,15 @@ private slots:
     void onMenuCreateGroupTriggered();
 
     void on_lstChat_customContextMenuRequested(const QPoint &pos);
+    void onChatScrollValueChanged(int value);
 
 private:
     void closeSearchPanel();
     void showStatus(const QString &text);
-    void appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs, const QString &messageId = QString(), bool isEdited = false);
+    void appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs, const QString &messageId = QString(), bool isEdited = false, bool prepend = false);
     void setupSplitLayout();
+
+    void requestHistoryPage(qint64 beforeId);
 
     Ui::MainWindow *ui;
     TcpSocket *m_tcpSocket;
@@ -57,6 +60,14 @@ private:
     QString m_lastSearchQuery;
     bool m_isAuthenticated;
     bool m_searchOpen;
+
+    qint64 m_oldestLoadedMessageId = 0;
+    bool m_loadingHistory = false;
+    bool m_hasMoreHistory = true;
+    int m_historyPrevScrollValue = 0;
+    int m_historyPrevScrollMax = 0;
+    int m_historyInsertedCount = 0;
+    bool m_prependHistoryBatch = false;
 };
 
 #endif // MAINWINDOW_H

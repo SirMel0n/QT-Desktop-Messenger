@@ -12,6 +12,7 @@
 #include <QInputDialog>
 #include "ConfigManager.h"
 #include <QDateTime>
+#include <QScrollBar>
 
 MainWindow::MainWindow(const QString &login, const QString &password, QWidget *parent)
     : QMainWindow(parent)
@@ -51,6 +52,9 @@ MainWindow::MainWindow(const QString &login, const QString &password, QWidget *p
     showStatus("Connecting...");
 
     m_tcpSocket->connectToServer(ConfigManager::instance().IpServer(), ConfigManager::instance().serverPort());
+
+    connect(ui->lstChat->verticalScrollBar(), &QScrollBar::valueChanged,
+            this, &MainWindow::onChatScrollValueChanged);
 }
 
 void MainWindow::setupSplitLayout()
@@ -118,20 +122,20 @@ void MainWindow::closeSearchPanel()
     m_tcpSocket->sendMessage("SEARCH:\n");
 }
 
-void MainWindow::appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs, const QString &messageId, bool isEdited)
+void MainWindow::appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs, const QString &messageId, bool isEdited, bool prepend)
 {
     if (user.isEmpty() || body.isEmpty()) {
         return;
     }
 
-    QListWidgetItem *item = new QListWidgetItem(ui->lstChat);
+    QListWidgetItem *item = new QListWidgetItem;
 
-    item->setData(Qt::UserRole, messageId);           // DB message id
-    item->setData(Qt::UserRole + 1, body);            // body
-    item->setData(Qt::UserRole + 2, user);            // sender
-    item->setData(Qt::UserRole + 3, timestampMs);     // timestamp
-    item->setData(Qt::UserRole + 4, outgoing);        // owner flag
-    item->setData(Qt::UserRole + 5, isEdited);        // edited flag
+    item->setData(Qt::UserRole, messageId);
+    item->setData(Qt::UserRole + 1, body);
+    item->setData(Qt::UserRole + 2, user);
+    item->setData(Qt::UserRole + 3, timestampMs);
+    item->setData(Qt::UserRole + 4, outgoing);
+    item->setData(Qt::UserRole + 5, isEdited);
 
     QWidget *rowWidget = new QWidget;
     QVBoxLayout *layout = new QVBoxLayout(rowWidget);
@@ -178,8 +182,18 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     layout->addWidget(msgLabel);
 
     item->setSizeHint(rowWidget->sizeHint());
+
+    if (prepend) {
+        ui->lstChat->insertItem(0, item);
+    } else {
+        ui->lstChat->addItem(item);
+    }
+
     ui->lstChat->setItemWidget(item, rowWidget);
-    ui->lstChat->scrollToBottom();
+
+    if (!prepend) {
+        ui->lstChat->scrollToBottom();
+    }
 }
 
 void MainWindow::onConnected()
@@ -299,8 +313,14 @@ void MainWindow::onResponseReceived(const QString &message)
         m_activePeer = message.mid(QString("SESSION_CREATED:").size()).trimmed();
         ui->lblActiveSession->setText("Active session: " + m_activePeer);
         ui->lstChat->clear();
+
+        m_oldestLoadedMessageId = 0;
+        m_loadingHistory = false;
+        m_hasMoreHistory = true;
+        m_historyInsertedCount = 0;
+
         showStatus("Session active with " + m_activePeer);
-        m_tcpSocket->sendMessage("PULL_PENDING\n");
+        requestHistoryPage(0);
         closeSearchPanel();
         return;
     }
@@ -453,6 +473,90 @@ void MainWindow::onResponseReceived(const QString &message)
         }
 
         showStatus("Message deleted");
+        return;
+    }
+
+    if (message.startsWith("HISTORY_BEGIN:")) {
+        const QString payload = message.mid(QString("HISTORY_BEGIN:").size());
+        const QStringList parts = payload.split(':');
+
+        const QString peer = parts.value(0).trimmed();
+        const bool hasMore = (parts.value(1).trimmed() == "1");
+
+        if (peer != m_activePeer) {
+            return;
+        }
+
+        m_hasMoreHistory = hasMore;
+        m_historyInsertedCount = 0;
+
+        // First page after ui->lstChat->clear() => false (append)
+        // Next pages while list already has content => true (prepend)
+        m_prependHistoryBatch = (ui->lstChat->count() > 0);
+
+        QScrollBar *bar = ui->lstChat->verticalScrollBar();
+        if (bar) {
+            m_historyPrevScrollValue = bar->value();
+            m_historyPrevScrollMax = bar->maximum();
+        }
+        return;
+    }
+
+    if (message.startsWith("HMSG:")) {
+        const int firstColon = message.indexOf(':');
+        const int secondColon = message.indexOf(':', firstColon + 1);
+        const int thirdColon = message.indexOf(':', secondColon + 1);
+        const int fourthColon = message.indexOf(':', thirdColon + 1);
+
+        if (firstColon == -1 || secondColon == -1 || thirdColon == -1 || fourthColon == -1) {
+            qDebug() << "Invalid HMSG format:" << message;
+            return;
+        }
+
+        const QString user = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
+        const QString tsStr = message.mid(secondColon + 1, thirdColon - secondColon - 1).trimmed();
+        const QString messageId = message.mid(thirdColon + 1, fourthColon - thirdColon - 1).trimmed();
+        const QString body = message.mid(fourthColon + 1).trimmed();
+
+        bool okTs = false;
+        const qint64 tsMs = tsStr.toLongLong(&okTs);
+
+        bool okId = false;
+        const qint64 msgId = messageId.toLongLong(&okId);
+
+        if (user.isEmpty() || body.isEmpty()) {
+            return;
+        }
+
+        const bool outgoing = (user == m_displayName);
+
+        // IMPORTANT: prepend only for older pages
+        appendChatBubble(user, body, outgoing, okTs ? tsMs : -1, messageId, false, m_prependHistoryBatch);
+
+        if (okId && (m_oldestLoadedMessageId == 0 || msgId < m_oldestLoadedMessageId)) {
+            m_oldestLoadedMessageId = msgId;
+        }
+
+        ++m_historyInsertedCount;
+        return;
+    }
+
+    if (message.startsWith("HISTORY_END:")) {
+        const QString peer = message.mid(QString("HISTORY_END:").size()).trimmed();
+        if (peer != m_activePeer) {
+            return;
+        }
+
+        QScrollBar *bar = ui->lstChat->verticalScrollBar();
+
+        // Keep viewport stable only when we prepended older items
+        if (bar && m_prependHistoryBatch && m_historyInsertedCount > 0) {
+            const int delta = bar->maximum() - m_historyPrevScrollMax;
+            bar->setValue(m_historyPrevScrollValue + delta);
+        }
+
+        m_loadingHistory = false;
+        m_prependHistoryBatch = false;
         return;
     }
 }
@@ -608,5 +712,41 @@ void MainWindow::on_lstChat_customContextMenuRequested(const QPoint &pos)
 
         delete ui->lstChat->takeItem(ui->lstChat->row(item));
         showStatus("Message deleted");
+    }
+}
+
+void MainWindow::requestHistoryPage(qint64 beforeId)
+{
+    // Guard conditions:
+    // - must be authenticated
+    // - must have active peer
+    // - don't send while a history request is in-flight
+    // - stop if server already said no more pages
+    if (!m_isAuthenticated || m_activePeer.isEmpty() || m_loadingHistory || !m_hasMoreHistory) {
+        return;
+    }
+
+    m_loadingHistory = true;
+    const int pageSize = 30;
+
+    // Cursor-style request:
+    // beforeId = 0 => latest page
+    // beforeId > 0 => older than this id
+    m_tcpSocket->sendMessage(QString("HISTORY:%1:%2:%3\n")
+                                 .arg(m_activePeer,
+                                      QString::number(beforeId),
+                                      QString::number(pageSize)));
+}
+
+void MainWindow::onChatScrollValueChanged(int value)
+{
+    QScrollBar *bar = ui->lstChat->verticalScrollBar();
+    if (!bar) {
+        return;
+    }
+
+    // When user reaches top, load older page using current oldest id as cursor.
+    if (value == bar->minimum()) {
+        requestHistoryPage(m_oldestLoadedMessageId);
     }
 }
