@@ -1,4 +1,4 @@
-#include "mainwindow.h"
+﻿#include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QShortcut>
 #include <QMessageBox>
@@ -27,6 +27,67 @@ MainWindow::MainWindow(const QString &login, const QString &password, QWidget *p
 {
     ui->setupUi(this);
     setupSplitLayout();
+
+    // Telegram-like style for chat list
+    ui->lstUsers->setSpacing(4);
+    ui->lstUsers->setStyleSheet(R"(
+        QListWidget {
+            background-color: #17212b;
+            border: 1px solid #0e1621;
+            border-radius: 10px;
+            outline: none;
+            color: #e6ebf5;
+            padding: 6px;
+        }
+
+        QListWidget::item {
+            background: transparent;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin: 2px 0px;
+            min-height: 42px;
+        }
+
+        QListWidget::item:hover {
+            background-color: #202b36;
+        }
+
+        QListWidget::item:selected {
+            background-color: #2b5278;
+            color: #ffffff;
+        }
+
+        QListWidget::item:selected:active {
+            background-color: #2f6ea5;
+        }
+
+        QScrollBar:vertical {
+            background: #17212b;
+            width: 10px;
+            margin: 6px 2px 6px 2px;
+            border: none;
+        }
+
+        QScrollBar::handle:vertical {
+            background: #3a4a5c;
+            min-height: 24px;
+            border-radius: 5px;
+        }
+
+        QScrollBar::handle:vertical:hover {
+            background: #4a5e74;
+        }
+
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical,
+        QScrollBar::add-page:vertical,
+        QScrollBar::sub-page:vertical {
+            background: none;
+            border: none;
+            height: 0px;
+        }
+    )");
 
     connect(m_tcpSocket, &TcpSocket::connected, this, &MainWindow::onConnected);
     connect(m_tcpSocket, &TcpSocket::disconnected, this, &MainWindow::onDisconnected);
@@ -115,11 +176,10 @@ void MainWindow::closeSearchPanel()
     ui->lnSearch->show();
     ui->btnSearch->setText("Search");
 
-    // keep list visible to preserve splitter layout
     ui->lstUsers->clear();
 
     // reload existing chats list
-    m_tcpSocket->sendMessage("SEARCH:\n");
+    m_tcpSocket->sendMessage("CHAT_LIST\n");
 }
 
 void MainWindow::appendChatBubble(const QString &user, const QString &body, bool outgoing, qint64 timestampMs, const QString &messageId, bool isEdited, bool prepend)
@@ -183,15 +243,48 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
 
     item->setSizeHint(rowWidget->sizeHint());
 
+    int insertRow = -1;
+
     if (prepend) {
-        ui->lstChat->insertItem(0, item);
+        insertRow = 0;
     } else {
-        ui->lstChat->addItem(item);
+        // Keep chronological order for live messages too
+        for (int i = 0; i < ui->lstChat->count(); ++i) {
+            QListWidgetItem *existing = ui->lstChat->item(i);
+            if (!existing) {
+                continue;
+            }
+
+            const qint64 existingTs = existing->data(Qt::UserRole + 3).toLongLong();
+            if (timestampMs > 0 && existingTs > 0) {
+                if (timestampMs < existingTs) {
+                    insertRow = i;
+                    break;
+                }
+
+                if (timestampMs == existingTs) {
+                    bool newOk = false;
+                    bool oldOk = false;
+                    const qint64 newId = messageId.toLongLong(&newOk);
+                    const qint64 oldId = existing->data(Qt::UserRole).toString().toLongLong(&oldOk);
+                    if (newOk && oldOk && newId < oldId) {
+                        insertRow = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (insertRow == -1) {
+            insertRow = ui->lstChat->count();
+        }
     }
 
+    ui->lstChat->insertItem(insertRow, item);
     ui->lstChat->setItemWidget(item, rowWidget);
 
-    if (!prepend) {
+    // Auto-scroll only when inserted at the end
+    if (insertRow == ui->lstChat->count() - 1) {
         ui->lstChat->scrollToBottom();
     }
 }
@@ -222,7 +315,7 @@ void MainWindow::onResponseReceived(const QString &message)
         m_displayName = message.mid(QString("AUTH_SUCCESS:").size()).trimmed();
         showStatus("Authenticated as " + m_displayName);
         m_tcpSocket->sendMessage("PULL_PENDING\n");
-        m_tcpSocket->sendMessage("SEARCH:\n"); // load existing chats immediately
+        m_tcpSocket->sendMessage("CHAT_LIST\n");
         return;
     }
 
@@ -238,76 +331,118 @@ void MainWindow::onResponseReceived(const QString &message)
         return;
     }
 
+    // NEW: passive incoming session notification (Telegram-style)
+    if (message.startsWith("SESSION_INVITE:")) {
+        const QString fromUser = message.mid(QString("SESSION_INVITE:").size()).trimmed();
+        if (!fromUser.isEmpty()) {
+            showStatus(fromUser + " started a chat with you");
+        }
+
+        if (m_isAuthenticated) {
+            m_tcpSocket->sendMessage("CHAT_LIST\n");
+        }
+        return;
+    }
+
     if (message.startsWith("SEARCH_EMPTY")) {
         ui->lstUsers->clear();
-
         QListWidgetItem *item = nullptr;
         if (m_searchOpen) {
             item = new QListWidgetItem("No online users found");
         } else {
             item = new QListWidgetItem("No chats yet");
         }
-
         item->setFlags(item->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
         ui->lstUsers->addItem(item);
         return;
     }
 
     if (message.startsWith("SEARCH_RESULT:")) {
-        const QString payload = message.mid(QString("SEARCH_RESULT:").size());
-        const QStringList entries = payload.split(';', Qt::SkipEmptyParts);
+    const QString payload = message.mid(QString("SEARCH_RESULT:").size());
+    const QStringList entries = payload.split(';', Qt::SkipEmptyParts);
 
-        ui->lstUsers->clear();
+    ui->lstUsers->clear();
 
-        for (const QString &entry : entries) {
-            const QStringList parts = entry.split('|');
-            const QString username = parts.value(0).trimmed();
-            const QString status = parts.value(1).trimmed();
+    for (const QString &entry : entries) {
+        const QStringList parts = entry.split('|');
+        const QString username = parts.value(0).trimmed();
+        const QString status = parts.value(1).trimmed();
 
-            if (username.isEmpty()) {
-                continue;
-            }
-
-            const bool isOnline = (status == "active" || status == "active_session");
-            const bool hasSession = (status == "session" || status == "active_session");
-
-            // Search mode: show both online users and existing chats
-            if (m_searchOpen && !(isOnline || hasSession)) {
-                continue;
-            }
-
-            // Normal mode: show existing chats only
-            if (!m_searchOpen && !hasSession) {
-                continue;
-            }
-
-            QString label = username;
-            if (status == "active_session") {
-                label += " (online chat)";
-            } else if (status == "active") {
-                label += " (online)";
-            } else {
-                label += " (chat)";
-            }
-
-            QListWidgetItem *item = new QListWidgetItem(label);
-            item->setData(Qt::UserRole, username);
-            ui->lstUsers->addItem(item);
+        if (username.isEmpty()) {
+            continue;
         }
 
-        if (ui->lstUsers->count() == 0) {
-            QListWidgetItem *item = nullptr;
-            if (m_searchOpen) {
-                item = new QListWidgetItem("No online users found");
-            } else {
-                item = new QListWidgetItem("No chats yet");
-            }
-            item->setFlags(item->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
-            ui->lstUsers->addItem(item);
+        const bool isOnline = (status == "active" || status == "active_session");
+        const bool hasSession = (status == "session" || status == "active_session");
+
+        // Search mode: show both online users and existing chats
+        if (m_searchOpen && !(isOnline || hasSession)) {
+            continue;
         }
 
-        return;
+        // Normal mode: show existing chats only
+        if (!m_searchOpen && !hasSession) {
+            continue;
+        }
+
+        QString subtitle;
+        if (status == "active_session") {
+            subtitle = "online • chat";
+        } else if (status == "active") {
+            subtitle = "online";
+        } else {
+            subtitle = "chat";
+        }
+
+        QListWidgetItem *item = new QListWidgetItem(ui->lstUsers);
+        item->setData(Qt::UserRole, username);
+        item->setSizeHint(QSize(0, 64));
+
+        QWidget *row = new QWidget(ui->lstUsers);
+        row->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
+        QVBoxLayout *root = new QVBoxLayout(row);
+        root->setContentsMargins(10, 6, 10, 6);
+        root->setSpacing(3);
+
+        QHBoxLayout *top = new QHBoxLayout();
+        top->setContentsMargins(0, 0, 0, 0);
+        top->setSpacing(6);
+
+        QLabel *nameLabel = new QLabel(username, row);
+        nameLabel->setStyleSheet("color: #e6ebf5; font-weight: 700;");
+
+        QLabel *onlineLabel = new QLabel(isOnline ? "●" : "", row);
+        onlineLabel->setStyleSheet("color: #4fc3f7; font-size: 10px;");
+
+        top->addWidget(nameLabel);
+        top->addWidget(onlineLabel);
+        top->addStretch();
+
+        QLabel *subtitleLabel = new QLabel(subtitle, row);
+        subtitleLabel->setStyleSheet("color: #9fb0c3; font-size: 12px;");
+        subtitleLabel->setWordWrap(false);
+
+        root->addLayout(top);
+        root->addWidget(subtitleLabel);
+
+        ui->lstUsers->addItem(item);
+        ui->lstUsers->setItemWidget(item, row);
     }
+
+    if (ui->lstUsers->count() == 0) {
+        QListWidgetItem *item = nullptr;
+        if (m_searchOpen) {
+            item = new QListWidgetItem("No online users found");
+        } else {
+            item = new QListWidgetItem("No chats yet");
+        }
+        item->setFlags(item->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
+        ui->lstUsers->addItem(item);
+    }
+
+    return;
+}
 
     if (message.startsWith("SESSION_CREATED:")) {
         m_activePeer = message.mid(QString("SESSION_CREATED:").size()).trimmed();
@@ -368,14 +503,27 @@ void MainWindow::onResponseReceived(const QString &message)
         }
 
         const bool outgoing = (user == m_displayName);
+
+        // Do not render incoming messages from another chat in the current chat pane
+        if (!outgoing && (m_activePeer.isEmpty() || user != m_activePeer)) {
+            showStatus(QString("New message from %1").arg(user));
+            m_tcpSocket->sendMessage("CHAT_LIST\n");
+            return;
+        }
+
         appendChatBubble(user, body, outgoing, ok ? tsMs : -1, messageId, false);
+        m_tcpSocket->sendMessage("CHAT_LIST\n");
         return;
     }
 
     if (message.startsWith("PRESENCE:")) {
         if (m_isAuthenticated) {
-            const QString packet = QString("SEARCH:%1\n").arg(m_searchOpen ? m_lastSearchQuery : QString());
-            m_tcpSocket->sendMessage(packet);
+            if (m_searchOpen) {
+                const QString packet = QString("SEARCH:%1\n").arg(m_lastSearchQuery);
+                m_tcpSocket->sendMessage(packet);
+            } else {
+                m_tcpSocket->sendMessage("CHAT_LIST\n");
+            }
         }
         return;
     }
@@ -443,6 +591,8 @@ void MainWindow::onResponseReceived(const QString &message)
         }
 
         showStatus("Message edited");
+        m_tcpSocket->sendMessage("CHAT_LIST\n");
+
         return;
     }
 
@@ -473,6 +623,7 @@ void MainWindow::onResponseReceived(const QString &message)
         }
 
         showStatus("Message deleted");
+        m_tcpSocket->sendMessage("CHAT_LIST\n");
         return;
     }
 
@@ -559,6 +710,136 @@ void MainWindow::onResponseReceived(const QString &message)
         m_prependHistoryBatch = false;
         return;
     }
+
+    if (message.startsWith("CHAT_LIST_EMPTY")) {
+
+        // check if search field is open
+        if (m_searchOpen) {
+            return;
+        }
+
+        // clear chat list + display message
+        ui->lstUsers->clear();
+        QListWidgetItem *item = new QListWidgetItem("No chats yet");
+        item->setFlags(item->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
+        ui->lstUsers->addItem(item);
+        return;
+    }
+
+    if (message.startsWith("CHAT_LIST_RESULT:")) {
+    if (m_searchOpen) {
+        return;
+    }
+
+    const QString payload = message.mid(QString("CHAT_LIST_RESULT:").size());
+    const QStringList entries = payload.split(';', Qt::SkipEmptyParts);
+
+    ui->lstUsers->clear();
+
+    for (const QString &entry : entries) {
+        const QStringList parts = entry.split('|');
+        const QString username = parts.value(0).trimmed();
+        const bool isOnline = (parts.value(1).trimmed() == "1");
+        const int unread = parts.value(2).trimmed().toInt();
+
+        bool okTs = false;
+        const qint64 tsMs = parts.value(3).trimmed().toLongLong(&okTs);
+        const QString previewRaw = parts.value(4).trimmed();
+
+        if (username.isEmpty()) {
+            continue;
+        }
+
+        QString timeText;
+        if (okTs && tsMs > 0) {
+            const QDateTime dt = QDateTime::fromMSecsSinceEpoch(tsMs, Qt::UTC).toLocalTime();
+            if (dt.isValid()) {
+                if (dt.date() == QDate::currentDate()) {
+                    timeText = dt.toString("HH:mm");
+                } else if (dt.date().year() == QDate::currentDate().year()) {
+                    timeText = dt.toString("dd MMM");
+                } else {
+                    timeText = dt.toString("dd.MM.yy");
+                }
+            }
+        }
+
+        const QString preview = previewRaw.isEmpty() ? "No messages yet" : previewRaw;
+
+        QListWidgetItem *item = new QListWidgetItem(ui->lstUsers);
+        item->setData(Qt::UserRole, username);
+        item->setSizeHint(QSize(0, 64));
+
+        QWidget *row = new QWidget(ui->lstUsers);
+        row->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
+        QVBoxLayout *root = new QVBoxLayout(row);
+        root->setContentsMargins(10, 6, 10, 6);
+        root->setSpacing(3);
+
+        QHBoxLayout *top = new QHBoxLayout();
+        top->setContentsMargins(0, 0, 0, 0);
+        top->setSpacing(6);
+
+        QLabel *nameLabel = new QLabel(username, row);
+        nameLabel->setStyleSheet("color: #e6ebf5; font-weight: 700;");
+
+        QLabel *onlineLabel = new QLabel(isOnline ? "●" : "", row);
+        onlineLabel->setStyleSheet("color: #4fc3f7; font-size: 10px;");
+
+        QLabel *timeLabel = new QLabel(timeText, row);
+        timeLabel->setStyleSheet("color: #7f91a4; font-size: 11px;");
+
+        top->addWidget(nameLabel);
+        top->addWidget(onlineLabel);
+        top->addStretch();
+        top->addWidget(timeLabel);
+
+        QHBoxLayout *bottom = new QHBoxLayout();
+        bottom->setContentsMargins(0, 0, 0, 0);
+        bottom->setSpacing(6);
+
+        QLabel *previewLabel = new QLabel(preview, row);
+        previewLabel->setStyleSheet("color: #9fb0c3; font-size: 12px;");
+        previewLabel->setWordWrap(false);
+
+        QLabel *badgeLabel = new QLabel(row);
+        if (unread > 0) {
+            badgeLabel->setText(QString::number(unread));
+            badgeLabel->setAlignment(Qt::AlignCenter);
+            badgeLabel->setMinimumWidth(20);
+            badgeLabel->setStyleSheet(
+                "background-color: #2f6ea5;"
+                "color: white;"
+                "border-radius: 10px;"
+                "padding: 1px 6px;"
+                "font-size: 11px;"
+                "font-weight: 700;");
+        } else {
+            badgeLabel->setText("");
+            badgeLabel->setMinimumWidth(0);
+        }
+
+        bottom->addWidget(previewLabel, 1);
+        if (unread > 0) {
+            bottom->addWidget(badgeLabel, 0, Qt::AlignRight);
+        }
+
+        root->addLayout(top);
+        root->addLayout(bottom);
+
+        ui->lstUsers->addItem(item);
+        ui->lstUsers->setItemWidget(item, row);
+    }
+
+    if (ui->lstUsers->count() == 0) {
+        QListWidgetItem *item = new QListWidgetItem("No chats yet");
+        item->setFlags(item->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
+        ui->lstUsers->addItem(item);
+    }
+
+    return;
+}
 }
 
 void MainWindow::onSocketError(const QString &errorMsg)
@@ -618,16 +899,32 @@ void MainWindow::on_lstUsers_itemClicked(QListWidgetItem *item)
 {
     if (!item || !m_isAuthenticated) {
         return;
-    }   
+    }
 
     const QString selectedUser = item->data(Qt::UserRole).toString().trimmed();
     if (selectedUser.isEmpty()) {
         return;
     }
 
-    const QString req = QString("SESSION_CREATE:%1\n").arg(selectedUser);
-    m_tcpSocket->sendMessage(req);
-    closeSearchPanel();
+    // Search mode: create new session
+    if (m_searchOpen) {
+        const QString req = QString("SESSION_CREATE:%1\n").arg(selectedUser);
+        m_tcpSocket->sendMessage(req);
+        closeSearchPanel();
+        return;
+    }
+
+    // Normal mode: open existing chat locally (no invite/session-create)
+    m_activePeer = selectedUser;
+    ui->lblActiveSession->setText("Active session: " + m_activePeer);
+    ui->lstChat->clear();
+
+    m_oldestLoadedMessageId = 0;
+    m_loadingHistory = false;
+    m_hasMoreHistory = true;
+    m_historyInsertedCount = 0;
+
+    requestHistoryPage(0);
 }
 
 void MainWindow::on_btnMenu_clicked()
