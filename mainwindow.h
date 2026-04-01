@@ -5,6 +5,7 @@
 #include "TcpSocket.h"
 #include <QShortcut>
 #include <QStringList>
+#include <QSet>
 
 class QListWidgetItem;
 class QMenu;
@@ -68,6 +69,7 @@ private:
     int m_historyPrevScrollMax = 0;
     int m_historyInsertedCount = 0;
     bool m_prependHistoryBatch = false;
+    QSet<QString> m_readMessageIds;
 };
 
 #endif // MAINWINDOW_H

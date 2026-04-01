@@ -27,38 +27,35 @@
      <string>Chat Window</string>
     </property>
     <layout class="QFormLayout" name="formLayout">
-     <item row="2" column="0">
-      <widget class="QLabel" name="label">
-       <property name="text">
-        <string>Message:</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="QLineEdit" name="lnMessage"/>
-     </item>
-     <item row="1" column="0" colspan="2">
-      <widget class="QListWidget" name="lstChat"/>
-     </item>
-     <item row="3" column="1">
-      <widget class="QPushButton" name="btnSend">
-       <property name="minimumSize">
-        <size>
-         <width>0</width>
-         <height>0</height>
-        </size>
-       </property>
-       <property name="text">
-        <string>Send</string>
-       </property>
-      </widget>
-     </item>
      <item row="0" column="0" colspan="2">
       <widget class="QLabel" name="lblActiveSession">
        <property name="text">
         <string>Active session:</string>
        </property>
       </widget>
+     </item>
+     <item row="1" column="0" colspan="2">
+      <widget class="QListWidget" name="lstChat"/>
+     </item>
+     <item row="2" column="0" colspan="2">
+      <layout class="QHBoxLayout" name="horizontalLayout_2">
+       <item>
+        <widget class="QLineEdit" name="lnMessage"/>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnSend">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>Send</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
      </item>
     </layout>
    </widget>

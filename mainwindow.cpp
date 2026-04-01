@@ -13,6 +13,7 @@
 #include "ConfigManager.h"
 #include <QDateTime>
 #include <QScrollBar>
+#include <QFrame>
 
 MainWindow::MainWindow(const QString &login, const QString &password, QWidget *parent)
     : QMainWindow(parent)
@@ -27,6 +28,9 @@ MainWindow::MainWindow(const QString &login, const QString &password, QWidget *p
 {
     ui->setupUi(this);
     setupSplitLayout();
+
+    // add message input place holder
+    ui->lnMessage->setPlaceholderText("Write a mesasage ... ");
 
     // Telegram-like style for chat list
     ui->lstUsers->setSpacing(4);
@@ -77,6 +81,118 @@ MainWindow::MainWindow(const QString &login, const QString &password, QWidget *p
 
         QScrollBar::handle:vertical:hover {
             background: #4a5e74;
+        }
+
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical,
+        QScrollBar::add-page:vertical,
+        QScrollBar::sub-page:vertical {
+            background: none;
+            border: none;
+            height: 0px;
+        }
+    )");
+
+    // Top/search area style to match Telegram-like palette
+    ui->btnMenu->setStyleSheet(R"(
+        QPushButton {
+            background-color: #1f2c3a;
+            color: #e6ebf5;
+            border: 1px solid #34495e;
+            border-radius: 9px;
+            padding: 6px 14px;
+            font-weight: 600;
+        }
+        QPushButton:hover { background-color: #27384a; }
+        QPushButton:pressed { background-color: #2f6ea5; }
+    )");
+
+    ui->btnSearch->setStyleSheet(R"(
+        QPushButton {
+            background-color: #2f6ea5;
+            color: #ffffff;
+            border: 1px solid #3f82bf;
+            border-radius: 9px;
+            padding: 6px 14px;
+            font-weight: 600;
+        }
+        QPushButton:hover { background-color: #3a7fba; }
+        QPushButton:pressed { background-color: #2a6292; }
+    )");
+
+    ui->lnSearch->setStyleSheet(R"(
+        QLineEdit {
+            background-color: #1f2c3a;
+            color: #e6ebf5;
+            border: 1px solid #34495e;
+            border-radius: 9px;
+            padding: 6px 10px;
+            selection-background-color: #2f6ea5;
+        }
+    )");
+
+    // Username row container (label + edit) styling
+    if (ui->layoutWidget) {
+        ui->layoutWidget->setStyleSheet(R"(
+            QLabel {
+                color: #dbe6f3;
+                font-weight: 600;
+            }
+            QLineEdit {
+                background-color: #1f2c3a;
+                color: #e6ebf5;
+                border: 1px solid #34495e;
+                border-radius: 9px;
+                padding: 6px 10px;
+                min-height: 18px;
+            }
+        )");
+    }
+
+    // Chat window frame style
+    ui->groupBox->setStyleSheet(R"(
+        QGroupBox {
+            border: 1px solid #0e1621;
+            border-radius: 12px;
+            margin-top: 10px;
+            background-color: #17212b;
+            color: #e6ebf5;
+            font-weight: 600;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 6px;
+            color: #9fb0c3;
+        }
+    )");
+
+    // Chat message list background + scrollbar
+    ui->lstChat->setStyleSheet(R"(
+        QListWidget {
+            background-color: #0f1822;
+            border: 1px solid #223345;
+            border-radius: 10px;
+            outline: none;
+            padding: 6px;
+        }
+
+        QListWidget::item {
+            border: none;
+            margin: 2px 0px;
+        }
+
+        QScrollBar:vertical {
+            background: #0f1822;
+            width: 10px;
+            margin: 6px 2px 6px 2px;
+            border: none;
+        }
+
+        QScrollBar::handle:vertical {
+            background: #3a4a5c;
+            min-height: 24px;
+            border-radius: 5px;
         }
 
         QScrollBar::add-line:vertical,
@@ -189,7 +305,6 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     }
 
     QListWidgetItem *item = new QListWidgetItem;
-
     item->setData(Qt::UserRole, messageId);
     item->setData(Qt::UserRole + 1, body);
     item->setData(Qt::UserRole + 2, user);
@@ -198,22 +313,46 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     item->setData(Qt::UserRole + 5, isEdited);
 
     QWidget *rowWidget = new QWidget;
-    QVBoxLayout *layout = new QVBoxLayout(rowWidget);
-    layout->setContentsMargins(8, 4, 8, 4);
-    layout->setSpacing(2);
+    QVBoxLayout *rowLayout = new QVBoxLayout(rowWidget);
+    rowLayout->setContentsMargins(8, 4, 8, 4);
+    rowLayout->setSpacing(0);
 
-    QWidget *headerWidget = new QWidget(rowWidget);
+    QFrame *bubbleFrame = new QFrame(rowWidget);
+    bubbleFrame->setFrameShape(QFrame::NoFrame);
+    bubbleFrame->setObjectName(outgoing ? "outgoingBubble" : "incomingBubble");
+
+    bubbleFrame->setStyleSheet(outgoing
+        ? "QFrame#outgoingBubble {"
+          "background-color: #2b5278;"
+          "border: 1px solid #3b6a98;"
+          "border-radius: 14px;"
+          "}"
+        : "QFrame#incomingBubble {"
+          "background-color: #182533;"
+          "border: 1px solid #2c3f54;"
+          "border-radius: 14px;"
+          "}");
+
+    const int maxBubbleWidth = qMax(260, (ui->lstChat->viewport()->width() * 72) / 100);
+    bubbleFrame->setMaximumWidth(maxBubbleWidth);
+
+    QVBoxLayout *bubbleLayout = new QVBoxLayout(bubbleFrame);
+    // increased bottom margin so letters like g/y/p are not clipped
+    bubbleLayout->setContentsMargins(10, 8, 10, 11);
+    bubbleLayout->setSpacing(4);
+
+    QWidget *headerWidget = new QWidget(bubbleFrame);
     QHBoxLayout *headerLayout = new QHBoxLayout(headerWidget);
     headerLayout->setContentsMargins(0, 0, 0, 0);
     headerLayout->setSpacing(6);
 
     QLabel *nameLabel = new QLabel(QString("(%1)").arg(user), headerWidget);
     nameLabel->setStyleSheet(outgoing
-                                 ? "color: #4A90E2; font-weight: 800;"
-                                 : "color: #FF0000; font-weight: 800;");
+                                 ? "color: #9ad1ff; font-weight: 700;"
+                                 : "color: #ff9b9b; font-weight: 700;");
 
     QLabel *timeLabel = new QLabel(headerWidget);
-    timeLabel->setStyleSheet("color: #A9A9A9; font-size: 11px; font-weight: 500;");
+    timeLabel->setStyleSheet("color: #aab7c4; font-size: 11px;");
 
     if (timestampMs > 0) {
         const QDateTime localDt = QDateTime::fromMSecsSinceEpoch(timestampMs, Qt::UTC).toLocalTime();
@@ -222,26 +361,54 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
         }
     }
 
-    QLabel *editedLabel = new QLabel(headerWidget);
+    QLabel *editedLabel = new QLabel("edited", headerWidget);
     editedLabel->setObjectName("msgEditedLabel");
-    editedLabel->setStyleSheet("color: #A9A9A9; font-size: 11px; font-style: italic;");
-    editedLabel->setText("edited");
+    editedLabel->setStyleSheet("color: #aab7c4; font-size: 11px; font-style: italic;");
     editedLabel->setVisible(isEdited);
+
+    QLabel *statusLabel = new QLabel(bubbleFrame);
+
+    statusLabel->setObjectName("msgStatusLabel");
+    statusLabel->setStyleSheet("color: #64B5F6; font-size: 12px; font-weight: 700;");
+    statusLabel->setVisible(outgoing);
+
+    if (outgoing && !messageId.isEmpty() && m_readMessageIds.contains(messageId)) {
+        statusLabel->setText("✓✓");
+    } else {
+        statusLabel->setText("✓");
+    }
 
     headerLayout->addWidget(nameLabel);
     headerLayout->addWidget(timeLabel);
     headerLayout->addWidget(editedLabel);
     headerLayout->addStretch();
 
-    QLabel *msgLabel = new QLabel(body, rowWidget);
+    // Body row: text + status tick at bottom-right
+    QHBoxLayout *bodyLayout = new QHBoxLayout();
+    bodyLayout->setContentsMargins(0, 0, 0, 0);
+    bodyLayout->setSpacing(6);
+
+    QLabel *msgLabel = new QLabel(body, bubbleFrame);
     msgLabel->setObjectName("msgBodyLabel");
     msgLabel->setWordWrap(true);
-    msgLabel->setStyleSheet("color: #EAEAEA;");
+    msgLabel->setStyleSheet("color: #eaf2ff; font-size: 13px;");
+    msgLabel->setContentsMargins(0, 0, 0, 2);
 
-    layout->addWidget(headerWidget);
-    layout->addWidget(msgLabel);
+    bodyLayout->addWidget(msgLabel, 1);
 
-    item->setSizeHint(rowWidget->sizeHint());
+    if (outgoing) {
+        statusLabel->setAlignment(Qt::AlignRight | Qt::AlignBottom);
+        statusLabel->setContentsMargins(0, 0, 0, 1);
+        bodyLayout->addWidget(statusLabel, 0, Qt::AlignRight | Qt::AlignBottom);
+    }
+
+    bubbleLayout->addWidget(headerWidget);
+    bubbleLayout->addLayout(bodyLayout);
+
+    rowLayout->addWidget(bubbleFrame, 0, outgoing ? Qt::AlignRight : Qt::AlignLeft);
+
+    // add tiny extra vertical slack to item
+    item->setSizeHint(rowWidget->sizeHint() + QSize(0, 4));
 
     int insertRow = -1;
 
@@ -512,8 +679,13 @@ void MainWindow::onResponseReceived(const QString &message)
         }
 
         appendChatBubble(user, body, outgoing, ok ? tsMs : -1, messageId, false);
-        m_tcpSocket->sendMessage("CHAT_LIST\n");
-        return;
+
+if (!outgoing && user == m_activePeer) {
+    m_tcpSocket->sendMessage(QString("MARK_READ:%1\n").arg(m_activePeer));
+}
+
+m_tcpSocket->sendMessage("CHAT_LIST\n");
+return;
     }
 
     if (message.startsWith("PRESENCE:")) {
@@ -527,6 +699,44 @@ void MainWindow::onResponseReceived(const QString &message)
         }
         return;
     }
+
+    if (message.startsWith("MSG_READ:")) {
+    const QString messageId = message.mid(QString("MSG_READ:").size()).trimmed();
+    if (messageId.isEmpty()) {
+        return;
+    }
+
+    // persist read state for future/history rendering
+    m_readMessageIds.insert(messageId);
+
+    for (int i = 0; i < ui->lstChat->count(); ++i) {
+        QListWidgetItem *it = ui->lstChat->item(i);
+        if (!it) {
+            continue;
+        }
+
+        if (!it->data(Qt::UserRole + 4).toBool()) {
+            continue;
+        }
+
+        if (it->data(Qt::UserRole).toString() != messageId) {
+            continue;
+        }
+
+        QWidget *rowWidget = ui->lstChat->itemWidget(it);
+        if (rowWidget) {
+            QLabel *statusLabel = rowWidget->findChild<QLabel *>("msgStatusLabel");
+            if (statusLabel) {
+                statusLabel->setVisible(true);
+                statusLabel->setText("✓✓");
+            }
+            it->setSizeHint(rowWidget->sizeHint());
+        }
+        break;
+    }
+
+    return;
+}
 
     if (message.startsWith("MSG_EDIT:")) {
         // MSG_EDIT:<messageId>:<newBody>
@@ -654,44 +864,61 @@ void MainWindow::onResponseReceived(const QString &message)
     }
 
     if (message.startsWith("HMSG:")) {
-        const int firstColon = message.indexOf(':');
-        const int secondColon = message.indexOf(':', firstColon + 1);
-        const int thirdColon = message.indexOf(':', secondColon + 1);
-        const int fourthColon = message.indexOf(':', thirdColon + 1);
+    const int firstColon = message.indexOf(':');
+    const int secondColon = message.indexOf(':', firstColon + 1);
+    const int thirdColon = message.indexOf(':', secondColon + 1);
+    const int fourthColon = message.indexOf(':', thirdColon + 1);
+    const int fifthColon = message.indexOf(':', fourthColon + 1);
 
-        if (firstColon == -1 || secondColon == -1 || thirdColon == -1 || fourthColon == -1) {
-            qDebug() << "Invalid HMSG format:" << message;
-            return;
-        }
-
-        const QString user = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
-        const QString tsStr = message.mid(secondColon + 1, thirdColon - secondColon - 1).trimmed();
-        const QString messageId = message.mid(thirdColon + 1, fourthColon - thirdColon - 1).trimmed();
-        const QString body = message.mid(fourthColon + 1).trimmed();
-
-        bool okTs = false;
-        const qint64 tsMs = tsStr.toLongLong(&okTs);
-
-        bool okId = false;
-        const qint64 msgId = messageId.toLongLong(&okId);
-
-        if (user.isEmpty() || body.isEmpty()) {
-            return;
-        }
-
-        const bool outgoing = (user == m_displayName);
-
-        // IMPORTANT: prepend only for older pages
-        appendChatBubble(user, body, outgoing, okTs ? tsMs : -1, messageId, false, m_prependHistoryBatch);
-
-        if (okId && (m_oldestLoadedMessageId == 0 || msgId < m_oldestLoadedMessageId)) {
-            m_oldestLoadedMessageId = msgId;
-        }
-
-        ++m_historyInsertedCount;
+    if (firstColon == -1 || secondColon == -1 || thirdColon == -1 || fourthColon == -1) {
+        qDebug() << "Invalid HMSG format:" << message;
         return;
     }
 
+    const QString user = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
+    const QString tsStr = message.mid(secondColon + 1, thirdColon - secondColon - 1).trimmed();
+    const QString messageId = message.mid(thirdColon + 1, fourthColon - thirdColon - 1).trimmed();
+
+    QString body;
+    bool isReadFromHistory = false;
+
+    // backward-compatible:
+    // old: HMSG:<sender>:<tsMs>:<id>:<body>
+    // new: HMSG:<sender>:<tsMs>:<id>:<isRead>:<body>
+    if (fifthColon == -1) {
+        body = message.mid(fourthColon + 1).trimmed();
+    } else {
+        const QString isReadStr = message.mid(fourthColon + 1, fifthColon - fourthColon - 1).trimmed();
+        isReadFromHistory = (isReadStr == "1");
+        body = message.mid(fifthColon + 1).trimmed();
+    }
+
+    bool okTs = false;
+    const qint64 tsMs = tsStr.toLongLong(&okTs);
+
+    bool okId = false;
+    const qint64 msgId = messageId.toLongLong(&okId);
+
+    if (user.isEmpty() || body.isEmpty()) {
+        return;
+    }
+
+    const bool outgoing = (user == m_displayName);
+
+    // strict persistence: restore read tick state from DB history
+    if (outgoing && isReadFromHistory && !messageId.isEmpty()) {
+        m_readMessageIds.insert(messageId);
+    }
+
+    appendChatBubble(user, body, outgoing, okTs ? tsMs : -1, messageId, false, m_prependHistoryBatch);
+
+    if (okId && (m_oldestLoadedMessageId == 0 || msgId < m_oldestLoadedMessageId)) {
+        m_oldestLoadedMessageId = msgId;
+    }
+
+    ++m_historyInsertedCount;
+    return;
+}
     if (message.startsWith("HISTORY_END:")) {
         const QString peer = message.mid(QString("HISTORY_END:").size()).trimmed();
         if (peer != m_activePeer) {
@@ -699,11 +926,14 @@ void MainWindow::onResponseReceived(const QString &message)
         }
 
         QScrollBar *bar = ui->lstChat->verticalScrollBar();
-
-        // Keep viewport stable only when we prepended older items
         if (bar && m_prependHistoryBatch && m_historyInsertedCount > 0) {
             const int delta = bar->maximum() - m_historyPrevScrollMax;
             bar->setValue(m_historyPrevScrollValue + delta);
+        }
+
+        // mark currently opened chat as read
+        if (m_isAuthenticated && !m_activePeer.isEmpty()) {
+            m_tcpSocket->sendMessage(QString("MARK_READ:%1\n").arg(m_activePeer));
         }
 
         m_loadingHistory = false;
@@ -804,6 +1034,7 @@ void MainWindow::onResponseReceived(const QString &message)
         previewLabel->setWordWrap(false);
 
         QLabel *badgeLabel = new QLabel(row);
+        badgeLabel->setObjectName("badgeLabel"); 
         if (unread > 0) {
             badgeLabel->setText(QString::number(unread));
             badgeLabel->setAlignment(Qt::AlignCenter);
@@ -904,6 +1135,16 @@ void MainWindow::on_lstUsers_itemClicked(QListWidgetItem *item)
     const QString selectedUser = item->data(Qt::UserRole).toString().trimmed();
     if (selectedUser.isEmpty()) {
         return;
+    }
+
+    // Proactively clear the badge on click
+    QWidget *rowWidget = ui->lstUsers->itemWidget(item);
+    if (rowWidget) {
+        QLabel *badgeLabel = rowWidget->findChild<QLabel *>("badgeLabel");
+        if (badgeLabel) {
+            badgeLabel->setText("");
+            badgeLabel->setMinimumWidth(0);
+        }
     }
 
     // Search mode: create new session
