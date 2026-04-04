@@ -14,6 +14,11 @@
 #include <QDateTime>
 #include <QScrollBar>
 #include <QFrame>
+#include "Settings/SettingsDialog.h"
+#include <QSettings>
+#include <QCoreApplication>
+#include <QStandardPaths>
+#include <QColor>
 
 MainWindow::MainWindow(const QString &login, const QString &password, QWidget *parent)
     : QMainWindow(parent)
@@ -232,6 +237,8 @@ MainWindow::MainWindow(const QString &login, const QString &password, QWidget *p
 
     connect(ui->lstChat->verticalScrollBar(), &QScrollBar::valueChanged,
             this, &MainWindow::onChatScrollValueChanged);
+
+    applyAppearanceSettingsFromSettings();
 }
 
 void MainWindow::setupSplitLayout()
@@ -303,6 +310,20 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     if (user.isEmpty() || body.isEmpty()) {
         return;
     }
+    const bool isLight = (m_themeName == "Light");
+    const QString textColor = isLight ? "#1c2733" : "#eaf2ff";
+    const QString metaColor = isLight ? "#64748b" : "#aab7c4";
+
+    const QColor accentColor(m_accentColor);
+    const QString accentLight = accentColor.lighter(150).name();
+
+    const QString outgoingNameColor = accentLight;
+    const QString incomingNameColor = isLight ? "#b03a3a" : "#ff9b9b";
+
+    const QString outgoingBubble = m_accentColor;
+    const QString outgoingBorder = "transparent";
+    const QString incomingBubble = isLight ? "#f0f4f8" : "#182533";
+    const QString incomingBorder = isLight ? "#d0d9e3" : "#2c3f54";
 
     QListWidgetItem *item = new QListWidgetItem;
     item->setData(Qt::UserRole, messageId);
@@ -322,16 +343,16 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     bubbleFrame->setObjectName(outgoing ? "outgoingBubble" : "incomingBubble");
 
     bubbleFrame->setStyleSheet(outgoing
-        ? "QFrame#outgoingBubble {"
-          "background-color: #2b5278;"
-          "border: 1px solid #3b6a98;"
-          "border-radius: 14px;"
-          "}"
-        : "QFrame#incomingBubble {"
-          "background-color: #182533;"
-          "border: 1px solid #2c3f54;"
-          "border-radius: 14px;"
-          "}");
+        ? QString("QFrame#outgoingBubble {"
+                  "background-color: %1;"
+                  "border: none;"
+                  "border-radius: 14px;"
+                  "}").arg(outgoingBubble)
+        : QString("QFrame#incomingBubble {"
+                  "background-color: %1;"
+			"border: none;" 
+                  "border-radius: 14px;"
+                  "}").arg(incomingBubble, incomingBorder));
 
     const int maxBubbleWidth = qMax(260, (ui->lstChat->viewport()->width() * 72) / 100);
     bubbleFrame->setMaximumWidth(maxBubbleWidth);
@@ -347,12 +368,14 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     headerLayout->setSpacing(6);
 
     QLabel *nameLabel = new QLabel(QString("(%1)").arg(user), headerWidget);
+    nameLabel->setObjectName("msgNameLabel");
     nameLabel->setStyleSheet(outgoing
-                                 ? "color: #9ad1ff; font-weight: 700;"
-                                 : "color: #ff9b9b; font-weight: 700;");
+                                 ? QString("color: %1; font-weight: 700;").arg(outgoingNameColor)
+                                 : QString("color: %1; font-weight: 700;").arg(incomingNameColor));
 
     QLabel *timeLabel = new QLabel(headerWidget);
-    timeLabel->setStyleSheet("color: #aab7c4; font-size: 11px;");
+    timeLabel->setObjectName("msgTimeLabel");
+    timeLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(metaColor));
 
     if (timestampMs > 0) {
         const QDateTime localDt = QDateTime::fromMSecsSinceEpoch(timestampMs, Qt::UTC).toLocalTime();
@@ -363,13 +386,13 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
 
     QLabel *editedLabel = new QLabel("edited", headerWidget);
     editedLabel->setObjectName("msgEditedLabel");
-    editedLabel->setStyleSheet("color: #aab7c4; font-size: 11px; font-style: italic;");
+    editedLabel->setStyleSheet(QString("color: %1; font-size: 11px; font-style: italic;").arg(metaColor));
     editedLabel->setVisible(isEdited);
 
     QLabel *statusLabel = new QLabel(bubbleFrame);
 
     statusLabel->setObjectName("msgStatusLabel");
-    statusLabel->setStyleSheet("color: #64B5F6; font-size: 12px; font-weight: 700;");
+    statusLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;").arg(accentLight));
     statusLabel->setVisible(outgoing);
 
     if (outgoing && !messageId.isEmpty() && m_readMessageIds.contains(messageId)) {
@@ -391,7 +414,7 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     QLabel *msgLabel = new QLabel(body, bubbleFrame);
     msgLabel->setObjectName("msgBodyLabel");
     msgLabel->setWordWrap(true);
-    msgLabel->setStyleSheet("color: #eaf2ff; font-size: 13px;");
+    msgLabel->setStyleSheet(QString("color: %1; font-size: 13px;").arg(textColor));
     msgLabel->setContentsMargins(0, 0, 0, 2);
 
     bodyLayout->addWidget(msgLabel, 1);
@@ -1040,12 +1063,12 @@ return;
             badgeLabel->setAlignment(Qt::AlignCenter);
             badgeLabel->setMinimumWidth(20);
             badgeLabel->setStyleSheet(
-                "background-color: #2f6ea5;"
-                "color: white;"
-                "border-radius: 10px;"
-                "padding: 1px 6px;"
-                "font-size: 11px;"
-                "font-weight: 700;");
+                QString("background-color: %1;"
+                        "color: white;"
+                        "border-radius: 10px;"
+                        "padding: 1px 6px;"
+                        "font-size: 11px;"
+                        "font-weight: 700;").arg(m_accentColor));
         } else {
             badgeLabel->setText("");
             badgeLabel->setMinimumWidth(0);
@@ -1180,9 +1203,27 @@ void MainWindow::on_btnMenu_clicked()
 
 void MainWindow::onMenuSettingsTriggered()
 {
-    QMessageBox::information(this, "Settings", "Settings dialog is not implemented yet.");
-}
+    SettingsDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
 
+    const QString settingsPath = QCoreApplication::applicationDirPath() + "/ui_config.ini";
+    QSettings settings(settingsPath, QSettings::IniFormat);
+
+    settings.setValue("ui/theme", dialog.selectedTheme());
+    settings.setValue("ui/accent", dialog.selectedAccent());
+    settings.setValue("ui/fontSize", dialog.selectedFontSize());
+    settings.setValue("ui/showTimestamps", dialog.showTimestamps());
+    settings.setValue("ui/compactChatList", dialog.compactChatList());
+    settings.sync();
+
+    applyAppearanceSettings(dialog.selectedTheme(),
+                            dialog.selectedAccent(),
+                            dialog.selectedFontSize(),
+                            dialog.showTimestamps(),
+                            dialog.compactChatList());
+}
 void MainWindow::onMenuCreateGroupTriggered()
 {
     QMessageBox::information(this, "Create Group Chat", "Group chat creation is not implemented yet.");
@@ -1286,5 +1327,240 @@ void MainWindow::onChatScrollValueChanged(int value)
     // When user reaches top, load older page using current oldest id as cursor.
     if (value == bar->minimum()) {
         requestHistoryPage(m_oldestLoadedMessageId);
+    }
+}
+
+void MainWindow::applyAppearanceSettingsFromSettings()
+{
+    const QString settingsPath = QCoreApplication::applicationDirPath() + "/ui_config.ini";
+    QSettings settings(settingsPath, QSettings::IniFormat);
+
+    applyAppearanceSettings(
+        settings.value("ui/theme", "Dark").toString(),
+        settings.value("ui/accent", "Blue").toString(),
+        settings.value("ui/fontSize", "Medium").toString(),
+        settings.value("ui/showTimestamps", true).toBool(),
+        settings.value("ui/compactChatList", false).toBool()
+    );
+}
+
+void MainWindow::applyAppearanceSettings(const QString &theme, const QString &accent, const QString &fontSize, bool showTimestamps, bool compactChatList)
+{
+    // get parameters values
+    m_themeName = theme;
+    m_accentName = accent;
+    m_fontSizeName = fontSize;
+    m_showTimestamps = showTimestamps;
+
+    // resolve fontsize and colours
+    m_accentColor = resolveAccentColor(accent);
+    m_uiFontSize = resolveFontSize(fontSize);
+
+    // apply theme ui
+    applyThemeStyles();
+
+    // set the font
+    QFont baseFont = font();
+    baseFont.setPointSize(m_uiFontSize);
+    ui->lstUsers->setFont(baseFont);
+    ui->lstChat->setFont(baseFont);
+    ui->lnSearch->setFont(baseFont);
+    ui->lnMessage->setFont(baseFont);
+    ui->lblActiveSession->setFont(baseFont);
+}
+
+QString MainWindow::resolveAccentColor(const QString &accent) const
+{
+    if (accent == "Slate") return "#607d8b";
+    if (accent == "Emerald") return "#2ecc71";
+    if (accent == "Purple") return "#7e57c2";
+    return "#2f6ea5"; // Blue
+}
+
+int MainWindow::resolveFontSize(const QString &fontSize) const
+{
+    if (fontSize == "Small") return 11;
+    if (fontSize == "Large") return 15;
+    return 13; // Medium
+}
+
+void MainWindow::applyThemeStyles()
+{
+    const bool isLight = (m_themeName == "Light");
+    const QString bg = isLight ? "#eef2f6" : "#17212b";
+    const QString panel = isLight ? "#f6f8fb" : "#1f2c3a";
+    const QString border = isLight ? "#d2d9e3" : "#34495e";
+    const QString text = isLight ? "#1c2733" : "#e6ebf5";
+    const QString hover = isLight ? "#e4e9f0" : "#27384a";
+    const QString chatBg = isLight ? "#f7f9fc" : "#0f1822";
+    const QString chatBorder = isLight ? "#dfe6ee" : "#223345";
+
+    const QString textColor = isLight ? "#1c2733" : "#eaf2ff";
+    const QString metaColor = isLight ? "#64748b" : "#aab7c4";
+    const QString outgoingNameColor = m_accentColor;
+    const QString incomingNameColor = isLight ? "#b03a3a" : "#ff9b9b";
+
+    const QString outgoingBubble = isLight ? "#d7ebff" : "#2b5278";
+    const QString outgoingBorder = m_accentColor;
+    const QString incomingBubble = isLight ? "#f0f4f8" : "#182533";
+    const QString incomingBorder = isLight ? "#d0d9e3" : "#2c3f54";
+
+    const QColor accentColor(m_accentColor);
+    const QString accentLight = accentColor.lighter(150).name();
+
+    ui->btnMenu->setStyleSheet(QString(R"(
+        QPushButton {
+            background-color: %1;
+            color: %2;
+            border: 1px solid %3;
+            border-radius: 9px;
+            padding: 6px 14px;
+            font-weight: 600;
+        }
+        QPushButton:hover { background-color: %4; }
+        QPushButton:pressed { background-color: %5; }
+    )").arg(panel, text, border, hover, m_accentColor));
+
+    ui->btnSearch->setStyleSheet(QString(R"(
+        QPushButton {
+            background-color: %1;
+            color: #ffffff;
+            border: 1px solid %2;
+            border-radius: 9px;
+            padding: 6px 14px;
+            font-weight: 600;
+        }
+        QPushButton:hover { background-color: %3; }
+        QPushButton:pressed { background-color: %4; }
+    )").arg(m_accentColor, m_accentColor, m_accentColor, m_accentColor));
+
+    ui->lnSearch->setStyleSheet(QString(R"(
+        QLineEdit {
+            background-color: %1;
+            color: %2;
+            border: 1px solid %3;
+            border-radius: 9px;
+            padding: 6px 10px;
+            selection-background-color: %4;
+        }
+        QLineEdit::placeholder { color: %5; }
+    )").arg(panel, text, border, m_accentColor, metaColor));
+
+    ui->lnMessage->setStyleSheet(QString(R"(
+        QLineEdit {
+            background-color: %1;
+            color: %2;
+            border: 1px solid %3;
+            border-radius: 9px;
+            padding: 6px 10px;
+            selection-background-color: %4;
+        }
+        QLineEdit::placeholder { color: %5; }
+    )").arg(panel, text, border, m_accentColor, metaColor));
+
+    ui->btnSend->setStyleSheet(QString(R"(
+        QPushButton {
+            background-color: %1;
+            color: #ffffff;
+            border: 1px solid %2;
+            border-radius: 9px;
+            padding: 6px 14px;
+            font-weight: 700;
+        }
+        QPushButton:hover { background-color: %3; }
+        QPushButton:pressed { background-color: %4; }
+    )").arg(m_accentColor, m_accentColor, m_accentColor, m_accentColor));
+
+    ui->lstUsers->setStyleSheet(QString(R"(
+        QListWidget {
+            background-color: %1;
+            border: 1px solid %2;
+            border-radius: 10px;
+            outline: none;
+            color: %3;
+            padding: 6px;
+        }
+        QListWidget::item:hover { background-color: %4; }
+        QListWidget::item:selected { background-color: %5; color: #ffffff; }
+        QListWidget::item:selected:active { background-color: %5; }
+    )").arg(bg, border, text, hover, m_accentColor));
+
+    ui->groupBox->setStyleSheet(QString(R"(
+        QGroupBox {
+            border: 1px solid %1;
+            border-radius: 12px;
+            margin-top: 10px;
+            background-color: %2;
+            color: %3;
+            font-weight: 600;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 6px;
+            color: %4;
+        }
+    )").arg(border, bg, text, isLight ? "#64748b" : "#9fb0c3"));
+
+    ui->lstChat->setStyleSheet(QString(R"(
+        QListWidget {
+            background-color: %1;
+            border: 1px solid %2;
+            border-radius: 10px;
+            outline: none;
+            padding: 6px;
+        }
+        QListWidget::item { border: none; margin: 2px 0px; }
+    )").arg(chatBg, chatBorder));
+
+    // Message bubbles (used by appendChatBubble)
+    const QString bubbleStyle = QString(
+        "QFrame#outgoingBubble {"
+        "background-color: %1;"
+        "border: none;"
+        "border-radius: 14px;"
+        "}"
+        "QFrame#incomingBubble {"
+        "background-color: %2;"
+        "border: 1px solid %3;"
+        "border-radius: 14px;"
+        "}"
+    ).arg(m_accentColor, incomingBubble, incomingBorder);
+
+    ui->lstChat->setStyleSheet(ui->lstChat->styleSheet() + bubbleStyle);
+
+    // Restyle existing chat bubbles + text
+    for (int i = 0; i < ui->lstChat->count(); ++i) {
+        QListWidgetItem *item = ui->lstChat->item(i);
+        if (!item) {
+            continue;
+        }
+
+        QWidget *rowWidget = ui->lstChat->itemWidget(item);
+        if (!rowWidget) {
+            continue;
+        }
+
+        QFrame *outgoingBubbleFrame = rowWidget->findChild<QFrame *>("outgoingBubble");
+        if (outgoingBubbleFrame) {
+            outgoingBubbleFrame->setStyleSheet(QString(
+                "QFrame#outgoingBubble {"
+                "background-color: %1;"
+                "border: none;"
+                "border-radius: 14px;"
+                "}").arg(m_accentColor));
+        }
+        QLabel* nameLabel = rowWidget->findChild<QLabel*>("msgNameLabel");
+        if (nameLabel) {
+            const bool outgoing = item->data(Qt::UserRole + 4).toBool();
+            nameLabel->setStyleSheet(outgoing
+                                         ? QString("color: %1; font-weight: 700;").arg(outgoingNameColor)
+                                         : QString("color: %1; font-weight: 700;").arg(incomingNameColor));
+        }
+
+        QLabel *statusLabel = rowWidget->findChild<QLabel *>("msgStatusLabel");
+        if (statusLabel) {
+            statusLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;").arg(accentLight));
+        }
     }
 }

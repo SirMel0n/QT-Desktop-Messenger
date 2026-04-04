@@ -15,6 +15,7 @@ qt_add_executable(DesktopMessenger
     Registration/registration.h Registration/registration.cpp Registration/registration.ui
     TcpSocket.h TcpSocket.cpp
     ConfigManager.h
+    Settings/SettingsDialog.h Settings/SettingsDialog.cpp
 )
 
 target_link_libraries(DesktopMessenger

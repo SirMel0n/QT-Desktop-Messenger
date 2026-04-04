@@ -48,6 +48,11 @@ private:
     void setupSplitLayout();
 
     void requestHistoryPage(qint64 beforeId);
+    void applyAppearanceSettingsFromSettings();
+    void applyAppearanceSettings(const QString &theme, const QString &accent, const QString &fontSize, bool showTimestamps, bool compactChatList);
+    void applyThemeStyles();
+    QString resolveAccentColor(const QString &accent) const;
+    int resolveFontSize(const QString &fontSize) const;
 
     Ui::MainWindow *ui;
     TcpSocket *m_tcpSocket;
@@ -70,6 +75,14 @@ private:
     int m_historyInsertedCount = 0;
     bool m_prependHistoryBatch = false;
     QSet<QString> m_readMessageIds;
+
+    QString m_themeName = "Dark";
+    QString m_accentName = "Blue";
+    QString m_fontSizeName = "Medium";
+    QString m_accentColor = "#2f6ea5";
+    int m_uiFontSize = 13;
+    bool m_showTimestamps = true;
+   
 };
 
 #endif // MAINWINDOW_H
