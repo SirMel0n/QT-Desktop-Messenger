@@ -315,12 +315,13 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     const QString metaColor = isLight ? "#64748b" : "#aab7c4";
 
     const QColor accentColor(m_accentColor);
-    const QString accentLight = accentColor.lighter(150).name();
+    const QString accentLight = accentColor.lighter(isLight ? 170 : 150).name();
+    const QString accentDark = accentColor.darker(isLight ? 140 : 100).name();
 
-    const QString outgoingNameColor = accentLight;
+    const QString outgoingNameColor = isLight ? accentDark : accentLight;
     const QString incomingNameColor = isLight ? "#b03a3a" : "#ff9b9b";
 
-    const QString outgoingBubble = m_accentColor;
+    const QString outgoingBubble = isLight ? accentLight : m_accentColor;
     const QString outgoingBorder = "transparent";
     const QString incomingBubble = isLight ? "#f0f4f8" : "#182533";
     const QString incomingBorder = isLight ? "#d0d9e3" : "#2c3f54";
@@ -375,7 +376,8 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
 
     QLabel *timeLabel = new QLabel(headerWidget);
     timeLabel->setObjectName("msgTimeLabel");
-    timeLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(metaColor));
+    timeLabel->setStyleSheet(QString("color: %1; font-size: 11px;")
+                                 .arg(outgoing ? outgoingNameColor : metaColor));
 
     if (timestampMs > 0) {
         const QDateTime localDt = QDateTime::fromMSecsSinceEpoch(timestampMs, Qt::UTC).toLocalTime();
@@ -392,7 +394,8 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     QLabel *statusLabel = new QLabel(bubbleFrame);
 
     statusLabel->setObjectName("msgStatusLabel");
-    statusLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;").arg(accentLight));
+    statusLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;")
+                                   .arg(outgoingNameColor));
     statusLabel->setVisible(outgoing);
 
     if (outgoing && !messageId.isEmpty() && m_readMessageIds.contains(messageId)) {
@@ -694,7 +697,7 @@ void MainWindow::onResponseReceived(const QString &message)
 
         const bool outgoing = (user == m_displayName);
 
-        // Do not render incoming messages from another chat in the current chat pane
+        // Do not render incoming messages from another chat in the current chatPane
         if (!outgoing && (m_activePeer.isEmpty() || user != m_activePeer)) {
             showStatus(QString("New message from %1").arg(user));
             m_tcpSocket->sendMessage("CHAT_LIST\n");
@@ -1525,7 +1528,7 @@ void MainWindow::applyThemeStyles()
         "border: 1px solid %3;"
         "border-radius: 14px;"
         "}"
-    ).arg(m_accentColor, incomingBubble, incomingBorder);
+    ).arg(isLight ? accentLight : m_accentColor, incomingBubble, incomingBorder);
 
     ui->lstChat->setStyleSheet(ui->lstChat->styleSheet() + bubbleStyle);
 
@@ -1548,19 +1551,23 @@ void MainWindow::applyThemeStyles()
                 "background-color: %1;"
                 "border: none;"
                 "border-radius: 14px;"
-                "}").arg(m_accentColor));
+                "}").arg(isLight ? accentLight : m_accentColor));
         }
-        QLabel* nameLabel = rowWidget->findChild<QLabel*>("msgNameLabel");
-        if (nameLabel) {
+
+        QLabel *timeLabel = rowWidget->findChild<QLabel *>("msgTimeLabel");
+        if (timeLabel) {
             const bool outgoing = item->data(Qt::UserRole + 4).toBool();
-            nameLabel->setStyleSheet(outgoing
-                                         ? QString("color: %1; font-weight: 700;").arg(outgoingNameColor)
-                                         : QString("color: %1; font-weight: 700;").arg(incomingNameColor));
+            timeLabel->setStyleSheet(QString("color: %1; font-size: 11px;")
+                                         .arg(outgoing ? outgoingNameColor : metaColor));
         }
 
         QLabel *statusLabel = rowWidget->findChild<QLabel *>("msgStatusLabel");
         if (statusLabel) {
-            statusLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;").arg(accentLight));
+            statusLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;")
+                                           .arg(outgoingNameColor));
         }
     }
+
+    ui->lblActiveSession->setStyleSheet(QString("color: %1; font-weight: 600;").arg(m_accentColor));
+    ui->label_2->setStyleSheet(QString("color: %1; font-weight: 600;").arg(m_accentColor));
 }
