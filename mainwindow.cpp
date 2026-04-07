@@ -19,6 +19,12 @@
 #include <QCoreApplication>
 #include <QStandardPaths>
 #include <QColor>
+#include <QFileInfo>
+#include <QGuiApplication>
+#include <QIcon>
+#include <QSoundEffect>
+#include <QSystemTrayIcon>
+#include <QUrl>
 
 MainWindow::MainWindow(const QString &login, const QString &password, QWidget *parent)
     : QMainWindow(parent)
@@ -316,12 +322,12 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
 
     const QColor accentColor(m_accentColor);
     const QString accentLight = accentColor.lighter(isLight ? 170 : 150).name();
-    const QString accentDark = accentColor.darker(isLight ? 140 : 100).name();
+    const QString accentDark = accentColor.darker(isLight ? 140 : 130).name();
 
     const QString outgoingNameColor = isLight ? accentDark : accentLight;
     const QString incomingNameColor = isLight ? "#b03a3a" : "#ff9b9b";
 
-    const QString outgoingBubble = isLight ? accentLight : m_accentColor;
+    const QString outgoingBubble = isLight ? accentLight : accentDark;
     const QString outgoingBorder = "transparent";
     const QString incomingBubble = isLight ? "#f0f4f8" : "#182533";
     const QString incomingBorder = isLight ? "#d0d9e3" : "#2c3f54";
@@ -351,9 +357,9 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
                   "}").arg(outgoingBubble)
         : QString("QFrame#incomingBubble {"
                   "background-color: %1;"
-			"border: none;" 
+                  "border: none;"
                   "border-radius: 14px;"
-                  "}").arg(incomingBubble, incomingBorder));
+                  "}").arg(incomingBubble));
 
     const int maxBubbleWidth = qMax(260, (ui->lstChat->viewport()->width() * 72) / 100);
     bubbleFrame->setMaximumWidth(maxBubbleWidth);
@@ -480,6 +486,7 @@ void MainWindow::appendChatBubble(const QString &user, const QString &body, bool
     if (insertRow == ui->lstChat->count() - 1) {
         ui->lstChat->scrollToBottom();
     }
+
 }
 
 void MainWindow::onConnected()
@@ -602,22 +609,24 @@ void MainWindow::onResponseReceived(const QString &message)
         top->setContentsMargins(0, 0, 0, 0);
         top->setSpacing(6);
 
+        const bool isLight = (m_themeName == "Light");
+        const QString listNameColor = isLight ? "#111827" : "#e6ebf5";
+        const QString listMetaColor = isLight ? "#4b5563" : "#9fb0c3";
+        const QString listTimeColor = isLight ? "#4b5563" : "#7f91a4";
+
         QLabel *nameLabel = new QLabel(username, row);
-        nameLabel->setStyleSheet("color: #e6ebf5; font-weight: 700;");
+        nameLabel->setObjectName("userNameLabel");
+        nameLabel->setStyleSheet(QString("color: %1; font-weight: 700;").arg(listNameColor));
 
         QLabel *onlineLabel = new QLabel(isOnline ? "●" : "", row);
-        onlineLabel->setStyleSheet("color: #4fc3f7; font-size: 10px;");
+        onlineLabel->setObjectName("onlineDotLabel");
+        onlineLabel->setStyleSheet(QString("color: %1; font-size: 10px;").arg(m_accentColor));
 
         top->addWidget(nameLabel);
         top->addWidget(onlineLabel);
         top->addStretch();
 
-        QLabel *subtitleLabel = new QLabel(subtitle, row);
-        subtitleLabel->setStyleSheet("color: #9fb0c3; font-size: 12px;");
-        subtitleLabel->setWordWrap(false);
-
         root->addLayout(top);
-        root->addWidget(subtitleLabel);
 
         ui->lstUsers->addItem(item);
         ui->lstUsers->setItemWidget(item, row);
@@ -674,7 +683,6 @@ void MainWindow::onResponseReceived(const QString &message)
         const QString user = message.mid(firstColon + 1, secondColon - firstColon - 1).trimmed();
         const QString tsStr = message.mid(secondColon + 1, thirdColon - secondColon - 1).trimmed();
 
-
         QString messageId;
         QString body;
 
@@ -700,18 +708,21 @@ void MainWindow::onResponseReceived(const QString &message)
         // Do not render incoming messages from another chat in the current chatPane
         if (!outgoing && (m_activePeer.isEmpty() || user != m_activePeer)) {
             showStatus(QString("New message from %1").arg(user));
+            showMessageNotification(user, body);
+            playMessageSound();
             m_tcpSocket->sendMessage("CHAT_LIST\n");
             return;
         }
 
         appendChatBubble(user, body, outgoing, ok ? tsMs : -1, messageId, false);
 
-if (!outgoing && user == m_activePeer) {
-    m_tcpSocket->sendMessage(QString("MARK_READ:%1\n").arg(m_activePeer));
-}
+        if (!outgoing && user == m_activePeer) {
+            playMessageSound();
+            m_tcpSocket->sendMessage(QString("MARK_READ:%1\n").arg(m_activePeer));
+        }
 
-m_tcpSocket->sendMessage("CHAT_LIST\n");
-return;
+        m_tcpSocket->sendMessage("CHAT_LIST\n");
+        return;
     }
 
     if (message.startsWith("PRESENCE:")) {
@@ -1020,7 +1031,7 @@ return;
             }
         }
 
-        const QString preview = previewRaw.isEmpty() ? "No messages yet" : previewRaw;
+         QString preview = previewRaw.isEmpty() ? "No messages yet" : previewRaw;
 
         QListWidgetItem *item = new QListWidgetItem(ui->lstUsers);
         item->setData(Qt::UserRole, username);
@@ -1037,14 +1048,26 @@ return;
         top->setContentsMargins(0, 0, 0, 0);
         top->setSpacing(6);
 
+        const bool isLight = (m_themeName == "Light");
+        const QString listNameColor = isLight ? "#111827" : "#e6ebf5";
+        const QString listMetaColor = isLight ? "#4b5563" : "#9fb0c3";
+        const QString listTimeColor = isLight ? "#4b5563" : "#7f91a4";
+
         QLabel *nameLabel = new QLabel(username, row);
-        nameLabel->setStyleSheet("color: #e6ebf5; font-weight: 700;");
+        nameLabel->setObjectName("userNameLabel");
+        nameLabel->setStyleSheet(QString("color: %1; font-weight: 700;").arg(listNameColor));
 
         QLabel *onlineLabel = new QLabel(isOnline ? "●" : "", row);
-        onlineLabel->setStyleSheet("color: #4fc3f7; font-size: 10px;");
+        onlineLabel->setObjectName("onlineDotLabel");
+        onlineLabel->setStyleSheet(QString("color: %1; font-size: 10px;").arg(m_accentColor));
 
         QLabel *timeLabel = new QLabel(timeText, row);
-        timeLabel->setStyleSheet("color: #7f91a4; font-size: 11px;");
+        timeLabel->setObjectName("timeLabel");
+        timeLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(listTimeColor));
+
+        QLabel *previewLabel = new QLabel(preview, row);
+        previewLabel->setObjectName("previewLabel");
+        previewLabel->setStyleSheet(QString("color: %1; font-size: 12px;").arg(listMetaColor));
 
         top->addWidget(nameLabel);
         top->addWidget(onlineLabel);
@@ -1054,10 +1077,6 @@ return;
         QHBoxLayout *bottom = new QHBoxLayout();
         bottom->setContentsMargins(0, 0, 0, 0);
         bottom->setSpacing(6);
-
-        QLabel *previewLabel = new QLabel(preview, row);
-        previewLabel->setStyleSheet("color: #9fb0c3; font-size: 12px;");
-        previewLabel->setWordWrap(false);
 
         QLabel *badgeLabel = new QLabel(row);
         badgeLabel->setObjectName("badgeLabel"); 
@@ -1072,9 +1091,12 @@ return;
                         "padding: 1px 6px;"
                         "font-size: 11px;"
                         "font-weight: 700;").arg(m_accentColor));
+            badgeLabel->setVisible(true);
         } else {
-            badgeLabel->setText("");
+            badgeLabel->clear();
             badgeLabel->setMinimumWidth(0);
+            badgeLabel->setStyleSheet(QString());
+            badgeLabel->setVisible(false);
         }
 
         bottom->addWidget(previewLabel, 1);
@@ -1126,6 +1148,7 @@ void MainWindow::on_btnSend_clicked()
     const QString packet = QString("MSG:%1:%2\n").arg(m_activePeer, msg);
     m_tcpSocket->sendMessage(packet);
     ui->lnMessage->clear();
+    playSendSound();
 }
 
 void MainWindow::on_btnSearch_clicked()
@@ -1168,8 +1191,10 @@ void MainWindow::on_lstUsers_itemClicked(QListWidgetItem *item)
     if (rowWidget) {
         QLabel *badgeLabel = rowWidget->findChild<QLabel *>("badgeLabel");
         if (badgeLabel) {
-            badgeLabel->setText("");
+            badgeLabel->clear();
             badgeLabel->setMinimumWidth(0);
+            badgeLabel->setStyleSheet(QString());
+            badgeLabel->setVisible(false);
         }
     }
 
@@ -1219,13 +1244,22 @@ void MainWindow::onMenuSettingsTriggered()
     settings.setValue("ui/fontSize", dialog.selectedFontSize());
     settings.setValue("ui/showTimestamps", dialog.showTimestamps());
     settings.setValue("ui/compactChatList", dialog.compactChatList());
+    settings.setValue("ui/notifySound", dialog.notifySound());
+    settings.setValue("ui/notifyPreview", dialog.notifyPreview());
+    settings.setValue("ui/notifyDnd", dialog.notifyDnd());
     settings.sync();
+    qDebug() << "Settings keys:" << settings.allKeys();
+    qDebug() << "Settings file:" << settings.fileName();
 
     applyAppearanceSettings(dialog.selectedTheme(),
                             dialog.selectedAccent(),
                             dialog.selectedFontSize(),
                             dialog.showTimestamps(),
                             dialog.compactChatList());
+
+    applyNotificationSettings(dialog.notifySound(),
+                              dialog.notifyPreview(),
+                              dialog.notifyDnd());
 }
 void MainWindow::onMenuCreateGroupTriggered()
 {
@@ -1338,12 +1372,31 @@ void MainWindow::applyAppearanceSettingsFromSettings()
     const QString settingsPath = QCoreApplication::applicationDirPath() + "/ui_config.ini";
     QSettings settings(settingsPath, QSettings::IniFormat);
 
+    const bool settingsEmpty = (QFileInfo(settingsPath).size() == 0) || settings.allKeys().isEmpty();
+    if (settingsEmpty) {
+        settings.setValue("ui/theme", "Dark");
+        settings.setValue("ui/accent", "Blue");
+        settings.setValue("ui/fontSize", "Medium");
+        settings.setValue("ui/showTimestamps", true);
+        settings.setValue("ui/compactChatList", false);
+        settings.setValue("ui/notifySound", true);
+        settings.setValue("ui/notifyPreview", true);
+        settings.setValue("ui/notifyDnd", false);
+        settings.sync();
+    }
+
     applyAppearanceSettings(
         settings.value("ui/theme", "Dark").toString(),
         settings.value("ui/accent", "Blue").toString(),
         settings.value("ui/fontSize", "Medium").toString(),
         settings.value("ui/showTimestamps", true).toBool(),
         settings.value("ui/compactChatList", false).toBool()
+    );
+
+    applyNotificationSettings(
+        settings.value("ui/notifySound", true).toBool(),
+        settings.value("ui/notifyPreview", true).toBool(),
+        settings.value("ui/notifyDnd", false).toBool()
     );
 }
 
@@ -1400,7 +1453,6 @@ void MainWindow::applyThemeStyles()
 
     const QString textColor = isLight ? "#1c2733" : "#eaf2ff";
     const QString metaColor = isLight ? "#64748b" : "#aab7c4";
-    const QString outgoingNameColor = m_accentColor;
     const QString incomingNameColor = isLight ? "#b03a3a" : "#ff9b9b";
 
     const QString outgoingBubble = isLight ? "#d7ebff" : "#2b5278";
@@ -1409,33 +1461,70 @@ void MainWindow::applyThemeStyles()
     const QString incomingBorder = isLight ? "#d0d9e3" : "#2c3f54";
 
     const QColor accentColor(m_accentColor);
-    const QString accentLight = accentColor.lighter(150).name();
+    const QString accentLight = accentColor.lighter(isLight ? 170 : 150).name();
+    const QString accentDark = accentColor.darker(isLight ? 140 : 130).name();
 
-    ui->btnMenu->setStyleSheet(QString(R"(
-        QPushButton {
-            background-color: %1;
-            color: %2;
-            border: 1px solid %3;
-            border-radius: 9px;
-            padding: 6px 14px;
-            font-weight: 600;
-        }
-        QPushButton:hover { background-color: %4; }
-        QPushButton:pressed { background-color: %5; }
-    )").arg(panel, text, border, hover, m_accentColor));
+    const QString outgoingNameColor = isLight ? accentDark : accentLight;
 
-    ui->btnSearch->setStyleSheet(QString(R"(
-        QPushButton {
-            background-color: %1;
-            color: #ffffff;
-            border: 1px solid %2;
-            border-radius: 9px;
-            padding: 6px 14px;
-            font-weight: 600;
-        }
-        QPushButton:hover { background-color: %3; }
-        QPushButton:pressed { background-color: %4; }
-    )").arg(m_accentColor, m_accentColor, m_accentColor, m_accentColor));
+    if(isLight) {
+
+
+        ui->btnMenu->setStyleSheet(QString(R"(
+            QPushButton {
+                background-color: %1;
+                color: #000000;
+                border: 1px solid %1;
+                border-radius: 9px;
+                padding: 6px 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover { background-color: %2; }
+            QPushButton:pressed { background-color: %3; }
+        )").arg(accentLight,
+                accentLight,
+                accentLight));
+    }else {
+
+        ui->btnMenu->setStyleSheet(QString(R"(
+            QPushButton {
+                background-color: %1;
+                color: #ffffff;
+                border: 1px solid %1;
+                border-radius: 9px;
+                padding: 6px 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover { background-color: %2; }
+            QPushButton:pressed { background-color: %3; }
+        )").arg(accentDark,accentDark,accentDark));
+    }
+    if (isLight){
+        ui->btnSearch->setStyleSheet(QString(R"(
+            QPushButton {
+                background-color: %1;
+                color: #000000;
+                border: 1px solid %2;
+                border-radius: 9px;
+                padding: 6px 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover { background-color: %3; }
+            QPushButton:pressed { background-color: %4; }
+        )").arg(accentLight,accentLight,accentLight,accentLight));
+    } else {
+        ui->btnSearch->setStyleSheet(QString(R"(
+            QPushButton {
+                background-color: %1;
+                color: #ffffff;
+                border: 1px solid %2;
+                border-radius: 9px;
+                padding: 6px 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover { background-color: %3; }
+            QPushButton:pressed { background-color: %4; }
+        )").arg(accentDark,accentDark,accentDark,accentDark));
+    }
 
     ui->lnSearch->setStyleSheet(QString(R"(
         QLineEdit {
@@ -1461,19 +1550,33 @@ void MainWindow::applyThemeStyles()
         QLineEdit::placeholder { color: %5; }
     )").arg(panel, text, border, m_accentColor, metaColor));
 
-    ui->btnSend->setStyleSheet(QString(R"(
-        QPushButton {
+    if(isLight){
+        ui->btnSend->setStyleSheet(QString(R"(
+            QPushButton {
+            background-color: %1;
+            color: #000000;
+            border: 1px solid %2;
+            border-radius: 9px;
+            padding: 6px 14px;
+            font-weight: 700;
+            }
+            QPushButton:hover { background-color: %3; }
+            QPushButton:pressed { background-color: %4; }
+        )").arg(accentLight,accentLight,accentLight,accentLight));
+    } else {
+        ui->btnSend->setStyleSheet(QString(R"(
+            QPushButton {
             background-color: %1;
             color: #ffffff;
             border: 1px solid %2;
             border-radius: 9px;
             padding: 6px 14px;
             font-weight: 700;
-        }
-        QPushButton:hover { background-color: %3; }
-        QPushButton:pressed { background-color: %4; }
-    )").arg(m_accentColor, m_accentColor, m_accentColor, m_accentColor));
-
+            }
+            QPushButton:hover { background-color: %3; }
+            QPushButton:pressed { background-color: %4; }
+        )").arg(accentDark,accentDark,accentDark,accentDark));
+    }
     ui->lstUsers->setStyleSheet(QString(R"(
         QListWidget {
             background-color: %1;
@@ -1486,7 +1589,7 @@ void MainWindow::applyThemeStyles()
         QListWidget::item:hover { background-color: %4; }
         QListWidget::item:selected { background-color: %5; color: #ffffff; }
         QListWidget::item:selected:active { background-color: %5; }
-    )").arg(bg, border, text, hover, m_accentColor));
+    )").arg(bg, border, text, hover, (isLight) ? accentLight : accentDark));
 
     ui->groupBox->setStyleSheet(QString(R"(
         QGroupBox {
@@ -1522,13 +1625,13 @@ void MainWindow::applyThemeStyles()
         "background-color: %1;"
         "border: none;"
         "border-radius: 14px;"
-        "}"
+        "} "
         "QFrame#incomingBubble {"
         "background-color: %2;"
         "border: 1px solid %3;"
         "border-radius: 14px;"
         "}"
-    ).arg(isLight ? accentLight : m_accentColor, incomingBubble, incomingBorder);
+    ).arg(isLight ? accentLight : accentDark, incomingBubble, incomingBorder);
 
     ui->lstChat->setStyleSheet(ui->lstChat->styleSheet() + bubbleStyle);
 
@@ -1551,7 +1654,7 @@ void MainWindow::applyThemeStyles()
                 "background-color: %1;"
                 "border: none;"
                 "border-radius: 14px;"
-                "}").arg(isLight ? accentLight : m_accentColor));
+                "}").arg(isLight ? accentLight : accentDark));
         }
 
         QLabel *timeLabel = rowWidget->findChild<QLabel *>("msgTimeLabel");
@@ -1559,15 +1662,155 @@ void MainWindow::applyThemeStyles()
             const bool outgoing = item->data(Qt::UserRole + 4).toBool();
             timeLabel->setStyleSheet(QString("color: %1; font-size: 11px;")
                                          .arg(outgoing ? outgoingNameColor : metaColor));
+
+            const QString accentUi = isLight ? accentLight : m_accentColor;
+            timeLabel->setStyleSheet(QString("color: %1; font-size: 11px;")
+                                       .arg(outgoing ? outgoingNameColor : metaColor));
         }
 
         QLabel *statusLabel = rowWidget->findChild<QLabel *>("msgStatusLabel");
         if (statusLabel) {
             statusLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;")
-                                           .arg(outgoingNameColor));
+                                   .arg(outgoingNameColor));
         }
     }
 
-    ui->lblActiveSession->setStyleSheet(QString("color: %1; font-weight: 600;").arg(m_accentColor));
-    ui->label_2->setStyleSheet(QString("color: %1; font-weight: 600;").arg(m_accentColor));
+    ui->lblActiveSession->setStyleSheet(QString("color: %1; font-weight: 600;").arg(accentDark));
+    ui->label_2->setStyleSheet(QString("color: %1; font-weight: 600;").arg(accentLight));
+
+    const QString listNameColor = isLight ? "#111827" : "#e6ebf5";
+    const QString listMetaColor = isLight ? "#4b5563" : "#9fb0c3";
+    const QString listTimeColor = isLight ? "#4b5563" : "#7f91a4";
+
+    for (int i = 0; i < ui->lstUsers->count(); ++i) {
+        QListWidgetItem *item = ui->lstUsers->item(i);
+        if (!item) {
+            continue;
+        }
+
+        QWidget *rowWidget = ui->lstUsers->itemWidget(item);
+        if (!rowWidget) {
+            continue;
+        }
+
+        QLabel *nameLabel = rowWidget->findChild<QLabel *>("userNameLabel");
+        if (nameLabel) {
+            nameLabel->setStyleSheet(QString("color: %1; font-weight: 700;").arg(listNameColor));
+        }
+
+        QLabel *subtitleLabel = rowWidget->findChild<QLabel *>("subtitleLabel");
+        if (subtitleLabel) {
+            subtitleLabel->setStyleSheet(QString("color: %1; font-size: 12px;").arg(listMetaColor));
+        }
+
+        QLabel *previewLabel = rowWidget->findChild<QLabel *>("previewLabel");
+        if (previewLabel) {
+            previewLabel->setStyleSheet(QString("color: %1; font-size: 12px;").arg(listMetaColor));
+        }
+
+        QLabel *timeLabel = rowWidget->findChild<QLabel *>("timeLabel");
+        if (timeLabel) {
+            timeLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(listTimeColor));
+        }
+
+        QLabel *onlineLabel = rowWidget->findChild<QLabel *>("onlineDotLabel");
+        if (onlineLabel) {
+            onlineLabel->setStyleSheet(QString("color: %1; font-size: 10px;").arg(m_accentColor));
+        }
+    }
+}
+
+void MainWindow::applyNotificationSettings(bool notifySound, bool notifyPreview, bool notifyDnd)
+{
+    // retrieve parameters
+    m_notifySound = notifySound;
+    m_notifyPreview = notifyPreview;
+    m_notifyDnd = notifyDnd;
+
+    ensureTrayIcon();
+
+    // enables the sound if the status is false
+    if (!m_messageSound) {
+        m_messageSound = new QSoundEffect(this);
+        m_messageSound->setLoopCount(1);
+        m_messageSound->setVolume(0.6f);
+    }
+
+    // locate the custom notification sound
+    const QString soundPath = QCoreApplication::applicationDirPath() + "/notify_fixed.wav";
+    if (QFileInfo::exists(soundPath)) {
+        m_messageSound->setSource(QUrl::fromLocalFile(soundPath));
+        qDebug() << "Notification sound:" << soundPath;
+    } else {
+        qWarning() << "Notification sound missing:" << soundPath;
+        m_messageSound->setSource(QUrl());
+    }
+
+
+    m_sendSound = new QSoundEffect(this);
+    m_sendSound->setLoopCount(1);
+    m_sendSound->setVolume(0.6f);
+
+    const QString sendPath = QCoreApplication::applicationDirPath() + "/send_fixed.wav";
+    if (QFileInfo::exists(sendPath)) {
+        m_sendSound->setSource(QUrl::fromLocalFile(sendPath));
+        qDebug() << "Send sound:" << sendPath;
+    } else {
+        qWarning() << "Send sound missing:" << sendPath;
+        m_sendSound->setSource(QUrl());
+    }
+
+}
+
+void MainWindow::showMessageNotification(const QString &fromUser, const QString &body)
+{
+    if (m_notifyDnd) {
+        return;
+    }
+
+    ensureTrayIcon();
+    if (!m_trayIcon || !m_trayIcon->isVisible()) {
+        return;
+    }
+
+    const QString title = QString("New message from %1").arg(fromUser);
+    const QString text = m_notifyPreview ? body : "Message preview hidden";
+    m_trayIcon->showMessage(title, text, QSystemTrayIcon::Information, 4000);
+}
+
+void MainWindow::playMessageSound()
+{
+    if (m_notifyDnd || !m_notifySound) {
+        return;
+    }
+
+    if (!m_messageSound || !m_messageSound->source().isValid()) {
+        return;
+    }
+
+    if (m_messageSound->status() == QSoundEffect::Ready) {
+        m_messageSound->play();
+    }
+}
+
+void MainWindow::ensureTrayIcon()
+{
+    if (m_trayIcon || !QSystemTrayIcon::isSystemTrayAvailable()) {
+        return;
+    }
+
+    m_trayIcon = new QSystemTrayIcon(this);
+    QIcon icon = windowIcon();
+    if (icon.isNull()) {
+        icon = QIcon::fromTheme("dialog-information");
+    }
+    m_trayIcon->setIcon(icon);
+    m_trayIcon->setVisible(true);
+}
+
+void MainWindow::playSendSound()
+{
+    if (m_sendSound->status() == QSoundEffect::Ready) {
+        m_sendSound->play();
+    }
 }

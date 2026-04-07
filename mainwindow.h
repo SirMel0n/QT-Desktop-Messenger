@@ -10,6 +10,8 @@
 class QListWidgetItem;
 class QMenu;
 class QPoint;
+class QSoundEffect;
+class QSystemTrayIcon;
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -54,6 +56,12 @@ private:
     QString resolveAccentColor(const QString &accent) const;
     int resolveFontSize(const QString &fontSize) const;
 
+    void applyNotificationSettings(bool notifySound, bool notifyPreview, bool notifyDnd);
+    void showMessageNotification(const QString &fromUser, const QString &body);
+    void playMessageSound();
+    void ensureTrayIcon();
+    void playSendSound();
+
     Ui::MainWindow *ui;
     TcpSocket *m_tcpSocket;
     QShortcut *shortcut;
@@ -82,7 +90,14 @@ private:
     QString m_accentColor = "#2f6ea5";
     int m_uiFontSize = 13;
     bool m_showTimestamps = true;
-   
+
+    bool m_notifySound = true;
+    bool m_notifyPreview = true;
+    bool m_notifyDnd = false;
+
+    QSystemTrayIcon *m_trayIcon = nullptr;
+    QSoundEffect *m_messageSound = nullptr;
+    QSoundEffect *m_sendSound = nullptr;
 };
 
 #endif // MAINWINDOW_H

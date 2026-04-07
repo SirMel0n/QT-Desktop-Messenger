@@ -21,8 +21,13 @@ public:
     bool showTimestamps() const;
     bool compactChatList() const;
 
+    bool notifySound() const;
+    bool notifyPreview() const;
+    bool notifyDnd() const;
+
 private:
     QWidget *createPersonalisationPage();
+    QWidget *createNotificationsPage();
     QWidget *createPage(const QString &title, const QString &description);
 
     QListWidget *m_navList = nullptr;
@@ -33,6 +38,10 @@ private:
     QComboBox *m_fontSizeCombo = nullptr;
     QCheckBox *m_compactListCheck = nullptr;
     QCheckBox *m_showTimestampsCheck = nullptr;
+
+    QCheckBox *m_notifySoundCheck = nullptr;
+    QCheckBox *m_notifyPreviewCheck = nullptr;
+    QCheckBox *m_notifyDndCheck = nullptr;
 };
 
 #endif // SETTINGSDIALOG_H
