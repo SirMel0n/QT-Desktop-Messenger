@@ -717,7 +717,13 @@ void MainWindow::onResponseReceived(const QString &message)
         appendChatBubble(user, body, outgoing, ok ? tsMs : -1, messageId, false);
 
         if (!outgoing && user == m_activePeer) {
-            playMessageSound();
+            const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+            if (nowMs - m_lastIncomingSendSoundMs > 1200) {
+                playSendSound();
+                m_lastIncomingSendSoundMs = nowMs;
+            }
+
+
             m_tcpSocket->sendMessage(QString("MARK_READ:%1\n").arg(m_activePeer));
         }
 
@@ -1738,6 +1744,8 @@ void MainWindow::applyNotificationSettings(bool notifySound, bool notifyPreview,
 
     // locate the custom notification sound
     const QString soundPath = QCoreApplication::applicationDirPath() + "/notify_fixed.wav";
+
+    // check the file path
     if (QFileInfo::exists(soundPath)) {
         m_messageSound->setSource(QUrl::fromLocalFile(soundPath));
         qDebug() << "Notification sound:" << soundPath;
@@ -1764,15 +1772,18 @@ void MainWindow::applyNotificationSettings(bool notifySound, bool notifyPreview,
 
 void MainWindow::showMessageNotification(const QString &fromUser, const QString &body)
 {
+    // enusure DND is off
     if (m_notifyDnd) {
         return;
     }
 
+    // ensure trayIcon has a pointer and is visible
     ensureTrayIcon();
     if (!m_trayIcon || !m_trayIcon->isVisible()) {
         return;
     }
 
+    // display the icon
     const QString title = QString("New message from %1").arg(fromUser);
     const QString text = m_notifyPreview ? body : "Message preview hidden";
     m_trayIcon->showMessage(title, text, QSystemTrayIcon::Information, 4000);
@@ -1780,14 +1791,17 @@ void MainWindow::showMessageNotification(const QString &fromUser, const QString 
 
 void MainWindow::playMessageSound()
 {
+    // check DND is off and message sound is enabled
     if (m_notifyDnd || !m_notifySound) {
         return;
     }
 
+    // validate the sound source
     if (!m_messageSound || !m_messageSound->source().isValid()) {
         return;
     }
 
+    // check the status
     if (m_messageSound->status() == QSoundEffect::Ready) {
         m_messageSound->play();
     }
@@ -1795,21 +1809,29 @@ void MainWindow::playMessageSound()
 
 void MainWindow::ensureTrayIcon()
 {
+    // check if the tray already exists
     if (m_trayIcon || !QSystemTrayIcon::isSystemTrayAvailable()) {
         return;
     }
 
+    // creaet a new tray icon
     m_trayIcon = new QSystemTrayIcon(this);
     QIcon icon = windowIcon();
     if (icon.isNull()) {
         icon = QIcon::fromTheme("dialog-information");
     }
+
+    // display the icon
     m_trayIcon->setIcon(icon);
     m_trayIcon->setVisible(true);
 }
 
 void MainWindow::playSendSound()
 {
+    if (!m_sendSound || !m_sendSound->source().isValid()) {
+        return;
+    }
+
     if (m_sendSound->status() == QSoundEffect::Ready) {
         m_sendSound->play();
     }

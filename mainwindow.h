@@ -83,6 +83,7 @@ private:
     int m_historyInsertedCount = 0;
     bool m_prependHistoryBatch = false;
     QSet<QString> m_readMessageIds;
+    qint64 m_lastIncomingSendSoundMs = 0;
 
     QString m_themeName = "Dark";
     QString m_accentName = "Blue";
