@@ -25,6 +25,9 @@
 #include <QSoundEffect>
 #include <QSystemTrayIcon>
 #include <QUrl>
+#include <QFile>
+#include <QTextStream>
+#include <QDir>
 
 MainWindow::MainWindow(const QString &login, const QString &password, QWidget *parent)
     : QMainWindow(parent)
@@ -622,11 +625,16 @@ void MainWindow::onResponseReceived(const QString &message)
         onlineLabel->setObjectName("onlineDotLabel");
         onlineLabel->setStyleSheet(QString("color: %1; font-size: 10px;").arg(m_accentColor));
 
+        QLabel *subtitleLabel = new QLabel(subtitle, row);
+        subtitleLabel->setObjectName("subtitleLabel");
+        subtitleLabel->setStyleSheet(QString("color: %1; font-size: 12px;").arg(listMetaColor));
+
         top->addWidget(nameLabel);
         top->addWidget(onlineLabel);
         top->addStretch();
 
         root->addLayout(top);
+        root->addWidget(subtitleLabel);
 
         ui->lstUsers->addItem(item);
         ui->lstUsers->setItemWidget(item, row);
@@ -1000,132 +1008,133 @@ void MainWindow::onResponseReceived(const QString &message)
     }
 
     if (message.startsWith("CHAT_LIST_RESULT:")) {
-    if (m_searchOpen) {
-        return;
-    }
-
-    const QString payload = message.mid(QString("CHAT_LIST_RESULT:").size());
-    const QStringList entries = payload.split(';', Qt::SkipEmptyParts);
-
-    ui->lstUsers->clear();
-
-    for (const QString &entry : entries) {
-        const QStringList parts = entry.split('|');
-        const QString username = parts.value(0).trimmed();
-        const bool isOnline = (parts.value(1).trimmed() == "1");
-        const int unread = parts.value(2).trimmed().toInt();
-
-        bool okTs = false;
-        const qint64 tsMs = parts.value(3).trimmed().toLongLong(&okTs);
-        const QString previewRaw = parts.value(4).trimmed();
-
-        if (username.isEmpty()) {
-            continue;
+        if (m_searchOpen) {
+            return;
         }
 
-        QString timeText;
-        if (okTs && tsMs > 0) {
-            const QDateTime dt = QDateTime::fromMSecsSinceEpoch(tsMs, Qt::UTC).toLocalTime();
-            if (dt.isValid()) {
-                if (dt.date() == QDate::currentDate()) {
-                    timeText = dt.toString("HH:mm");
-                } else if (dt.date().year() == QDate::currentDate().year()) {
-                    timeText = dt.toString("dd MMM");
-                } else {
-                    timeText = dt.toString("dd.MM.yy");
+        const QString payload = message.mid(QString("CHAT_LIST_RESULT:").size());
+        const QStringList entries = payload.split(';', Qt::SkipEmptyParts);
+
+        ui->lstUsers->clear();
+
+        for (const QString &entry : entries) {
+            const QStringList parts = entry.split('|');
+            const QString username = parts.value(0).trimmed();
+            const bool isOnline = (parts.value(1).trimmed() == "1");
+            const int unread = parts.value(2).trimmed().toInt();
+
+            bool okTs = false;
+            const qint64 tsMs = parts.value(3).trimmed().toLongLong(&okTs);
+            const QString previewRaw = parts.value(4).trimmed();
+
+            if (username.isEmpty()) {
+                continue;
+            }
+
+            QString timeText;
+            if (okTs && tsMs > 0) {
+                const QDateTime dt = QDateTime::fromMSecsSinceEpoch(tsMs, Qt::UTC).toLocalTime();
+                if (dt.isValid()) {
+                    if (dt.date() == QDate::currentDate()) {
+                        timeText = dt.toString("HH:mm");
+                    } else if (dt.date().year() == QDate::currentDate().year()) {
+                        timeText = dt.toString("dd MMM");
+                    } else {
+                        timeText = dt.toString("dd.MM.yy");
+                    }
                 }
             }
+
+            QString preview = previewRaw.isEmpty() ? "No messages yet" : previewRaw;
+
+            QListWidgetItem *item = new QListWidgetItem(ui->lstUsers);
+            item->setData(Qt::UserRole, username);
+            item->setSizeHint(QSize(0, 64));
+
+            QWidget *row = new QWidget(ui->lstUsers);
+            row->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
+            QVBoxLayout *root = new QVBoxLayout(row);
+            root->setContentsMargins(10, 6, 10, 6);
+            root->setSpacing(3);
+
+            QHBoxLayout *top = new QHBoxLayout();
+            top->setContentsMargins(0, 0, 0, 0);
+            top->setSpacing(6);
+
+            const bool isLight = (m_themeName == "Light");
+            const QString listNameColor = isLight ? "#111827" : "#e6ebf5";
+            const QString listMetaColor = isLight ? "#4b5563" : "#9fb0c3";
+            const QString listTimeColor = isLight ? "#4b5563" : "#7f91a4";
+
+            QLabel *nameLabel = new QLabel(username, row);
+            nameLabel->setObjectName("userNameLabel");
+            nameLabel->setStyleSheet(QString("color: %1; font-weight: 700;").arg(listNameColor));
+
+            QLabel *onlineLabel = new QLabel(isOnline ? "●" : "", row);
+            onlineLabel->setObjectName("onlineDotLabel");
+            onlineLabel->setStyleSheet(QString("color: %1; font-size: 10px;").arg(m_accentColor));
+
+            QLabel *timeLabel = new QLabel(timeText, row);
+            timeLabel->setObjectName("timeLabel");
+            timeLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(listTimeColor));
+
+            QLabel *previewLabel = new QLabel(preview, row);
+            previewLabel->setObjectName("previewLabel");
+            previewLabel->setStyleSheet(QString("color: %1; font-size: 12px;").arg(listMetaColor));
+
+            top->addWidget(nameLabel);
+            top->addWidget(onlineLabel);
+            top->addStretch();
+            top->addWidget(timeLabel);
+
+            QHBoxLayout *bottom = new QHBoxLayout();
+            bottom->setContentsMargins(0, 0, 0, 0);
+            bottom->setSpacing(6);
+
+            QLabel *badgeLabel = new QLabel(row);
+            badgeLabel->setObjectName("badgeLabel");
+            if (unread > 0) {
+                badgeLabel->setText(QString::number(unread));
+                badgeLabel->setAlignment(Qt::AlignCenter);
+                badgeLabel->setMinimumWidth(20);
+                badgeLabel->setStyleSheet(
+                    QString("background-color: %1;"
+                            "color: white;"
+                            "border-radius: 10px;"
+                            "padding: 1px 6px;"
+                            "font-size: 11px;"
+                            "font-weight: 700;").arg(m_accentColor));
+                badgeLabel->setVisible(true);
+            } else {
+                badgeLabel->clear();
+                badgeLabel->setMinimumWidth(0);
+                badgeLabel->setStyleSheet(QString());
+                badgeLabel->setVisible(false);
+            }
+
+            bottom->addWidget(previewLabel, 1);
+            if (unread > 0) {
+                bottom->addWidget(badgeLabel, 0, Qt::AlignRight);
+            }
+
+            root->addLayout(top);
+            root->addLayout(bottom);
+
+            ui->lstUsers->addItem(item);
+            ui->lstUsers->setItemWidget(item, row);
         }
 
-         QString preview = previewRaw.isEmpty() ? "No messages yet" : previewRaw;
-
-        QListWidgetItem *item = new QListWidgetItem(ui->lstUsers);
-        item->setData(Qt::UserRole, username);
-        item->setSizeHint(QSize(0, 64));
-
-        QWidget *row = new QWidget(ui->lstUsers);
-        row->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-
-        QVBoxLayout *root = new QVBoxLayout(row);
-        root->setContentsMargins(10, 6, 10, 6);
-        root->setSpacing(3);
-
-        QHBoxLayout *top = new QHBoxLayout();
-        top->setContentsMargins(0, 0, 0, 0);
-        top->setSpacing(6);
-
-        const bool isLight = (m_themeName == "Light");
-        const QString listNameColor = isLight ? "#111827" : "#e6ebf5";
-        const QString listMetaColor = isLight ? "#4b5563" : "#9fb0c3";
-        const QString listTimeColor = isLight ? "#4b5563" : "#7f91a4";
-
-        QLabel *nameLabel = new QLabel(username, row);
-        nameLabel->setObjectName("userNameLabel");
-        nameLabel->setStyleSheet(QString("color: %1; font-weight: 700;").arg(listNameColor));
-
-        QLabel *onlineLabel = new QLabel(isOnline ? "●" : "", row);
-        onlineLabel->setObjectName("onlineDotLabel");
-        onlineLabel->setStyleSheet(QString("color: %1; font-size: 10px;").arg(m_accentColor));
-
-        QLabel *timeLabel = new QLabel(timeText, row);
-        timeLabel->setObjectName("timeLabel");
-        timeLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(listTimeColor));
-
-        QLabel *previewLabel = new QLabel(preview, row);
-        previewLabel->setObjectName("previewLabel");
-        previewLabel->setStyleSheet(QString("color: %1; font-size: 12px;").arg(listMetaColor));
-
-        top->addWidget(nameLabel);
-        top->addWidget(onlineLabel);
-        top->addStretch();
-        top->addWidget(timeLabel);
-
-        QHBoxLayout *bottom = new QHBoxLayout();
-        bottom->setContentsMargins(0, 0, 0, 0);
-        bottom->setSpacing(6);
-
-        QLabel *badgeLabel = new QLabel(row);
-        badgeLabel->setObjectName("badgeLabel"); 
-        if (unread > 0) {
-            badgeLabel->setText(QString::number(unread));
-            badgeLabel->setAlignment(Qt::AlignCenter);
-            badgeLabel->setMinimumWidth(20);
-            badgeLabel->setStyleSheet(
-                QString("background-color: %1;"
-                        "color: white;"
-                        "border-radius: 10px;"
-                        "padding: 1px 6px;"
-                        "font-size: 11px;"
-                        "font-weight: 700;").arg(m_accentColor));
-            badgeLabel->setVisible(true);
-        } else {
-            badgeLabel->clear();
-            badgeLabel->setMinimumWidth(0);
-            badgeLabel->setStyleSheet(QString());
-            badgeLabel->setVisible(false);
+        if (ui->lstUsers->count() == 0) {
+            QListWidgetItem *item = new QListWidgetItem("No chats yet");
+            item->setFlags(item->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
+            ui->lstUsers->addItem(item);
         }
 
-        bottom->addWidget(previewLabel, 1);
-        if (unread > 0) {
-            bottom->addWidget(badgeLabel, 0, Qt::AlignRight);
-        }
-
-        root->addLayout(top);
-        root->addLayout(bottom);
-
-        ui->lstUsers->addItem(item);
-        ui->lstUsers->setItemWidget(item, row);
+        return;
     }
-
-    if (ui->lstUsers->count() == 0) {
-        QListWidgetItem *item = new QListWidgetItem("No chats yet");
-        item->setFlags(item->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
-        ui->lstUsers->addItem(item);
-    }
-
-    return;
 }
-}
+
 
 void MainWindow::onSocketError(const QString &errorMsg)
 {
@@ -1376,10 +1385,17 @@ void MainWindow::onChatScrollValueChanged(int value)
 void MainWindow::applyAppearanceSettingsFromSettings()
 {
     const QString settingsPath = QCoreApplication::applicationDirPath() + "/ui_config.ini";
-    QSettings settings(settingsPath, QSettings::IniFormat);
+    qDebug() << ">> Settings path:" << settingsPath;
 
-    const bool settingsEmpty = (QFileInfo(settingsPath).size() == 0) || settings.allKeys().isEmpty();
-    if (settingsEmpty) {
+    const QFileInfo info(settingsPath);
+    QDir settingsDir(info.absolutePath());
+    if (!settingsDir.exists()) {
+        settingsDir.mkpath(".");
+    }
+
+    auto writeDefaults = [&]() {
+        QSettings settings(settingsPath, QSettings::IniFormat);
+        settings.clear();
         settings.setValue("ui/theme", "Dark");
         settings.setValue("ui/accent", "Blue");
         settings.setValue("ui/fontSize", "Medium");
@@ -1389,20 +1405,49 @@ void MainWindow::applyAppearanceSettingsFromSettings()
         settings.setValue("ui/notifyPreview", true);
         settings.setValue("ui/notifyDnd", false);
         settings.sync();
+    };
+
+    QSettings settings(settingsPath, QSettings::IniFormat);
+
+    const QFileInfo afterOpenInfo(settingsPath);
+    const bool settingsEmpty = (afterOpenInfo.size() == 0) || settings.allKeys().isEmpty();
+    if (settingsEmpty) {
+        writeDefaults();
     }
 
+    if (QFileInfo(settingsPath).size() == 0) {
+        QFile fallback(settingsPath);
+        if (fallback.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            QTextStream out(&fallback);
+            out << "[ui]\n"
+                << "theme=Dark\n"
+                << "accent=Blue\n"
+                << "fontSize=Medium\n"
+                << "showTimestamps=true\n"
+                << "compactChatList=false\n"
+                << "notifySound=true\n"
+                << "notifyPreview=true\n"
+                << "notifyDnd=false\n";
+            fallback.close();
+        } else {
+            qWarning() << ">> Failed to write settings:" << fallback.errorString();
+        }
+    }
+
+    QSettings refreshed(settingsPath, QSettings::IniFormat);
+
     applyAppearanceSettings(
-        settings.value("ui/theme", "Dark").toString(),
-        settings.value("ui/accent", "Blue").toString(),
-        settings.value("ui/fontSize", "Medium").toString(),
-        settings.value("ui/showTimestamps", true).toBool(),
-        settings.value("ui/compactChatList", false).toBool()
+        refreshed.value("ui/theme", "Dark").toString(),
+        refreshed.value("ui/accent", "Blue").toString(),
+        refreshed.value("ui/fontSize", "Medium").toString(),
+        refreshed.value("ui/showTimestamps", true).toBool(),
+        refreshed.value("ui/compactChatList", false).toBool()
     );
 
     applyNotificationSettings(
-        settings.value("ui/notifySound", true).toBool(),
-        settings.value("ui/notifyPreview", true).toBool(),
-        settings.value("ui/notifyDnd", false).toBool()
+        refreshed.value("ui/notifySound", true).toBool(),
+        refreshed.value("ui/notifyPreview", true).toBool(),
+        refreshed.value("ui/notifyDnd", false).toBool()
     );
 }
 
@@ -1504,6 +1549,7 @@ void MainWindow::applyThemeStyles()
             QPushButton:pressed { background-color: %3; }
         )").arg(accentDark,accentDark,accentDark));
     }
+
     if (isLight){
         ui->btnSearch->setStyleSheet(QString(R"(
             QPushButton {
@@ -1748,9 +1794,9 @@ void MainWindow::applyNotificationSettings(bool notifySound, bool notifyPreview,
     // check the file path
     if (QFileInfo::exists(soundPath)) {
         m_messageSound->setSource(QUrl::fromLocalFile(soundPath));
-        qDebug() << "Notification sound:" << soundPath;
+        qDebug() << ">> Notification sound:" << soundPath;
     } else {
-        qWarning() << "Notification sound missing:" << soundPath;
+        qWarning() << ">> Notification sound missing:" << soundPath;
         m_messageSound->setSource(QUrl());
     }
 
@@ -1762,9 +1808,9 @@ void MainWindow::applyNotificationSettings(bool notifySound, bool notifyPreview,
     const QString sendPath = QCoreApplication::applicationDirPath() + "/send_fixed.wav";
     if (QFileInfo::exists(sendPath)) {
         m_sendSound->setSource(QUrl::fromLocalFile(sendPath));
-        qDebug() << "Send sound:" << sendPath;
+        qDebug() << ">> Send sound:" << sendPath;
     } else {
-        qWarning() << "Send sound missing:" << sendPath;
+        qWarning() << ">> Send sound missing:" << sendPath;
         m_sendSound->setSource(QUrl());
     }
 
